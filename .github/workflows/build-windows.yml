@@ -125,11 +125,11 @@ jobs:
           if (Test-Path $nsisBin) {
             & $nsisBin wrapper.nsi
             if ($LASTEXITCODE -ne 0) {
-              Write-Warning "Wrapper compile failed — falling back to raw installer"
+              Write-Warning "Wrapper compile failed - falling back to raw installer"
               Copy-Item $rawExe "MarksAmazingSubs-windows-x86_64-setup.exe"
             }
           } else {
-            Write-Host "NSIS not found on runner — using raw Tauri installer"
+            Write-Host "NSIS not found on runner - using raw Tauri installer"
             Copy-Item $rawExe "MarksAmazingSubs-windows-x86_64-setup.exe"
           }
 
