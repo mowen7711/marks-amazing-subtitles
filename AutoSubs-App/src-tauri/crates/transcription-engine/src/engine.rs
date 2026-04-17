@@ -3,8 +3,9 @@ use eyre::eyre;
 use crate::types::{SpeechSegment, DiarizeOptions, LabeledProgressFn, NewSegmentFn, Segment, VoiceSample};
 use crate::formatting::{process_segments, PostProcessConfig, TextDensity};
 
+#[cfg(not(target_os = "windows"))]
 use crate::engines::moonshine::{is_moonshine_model, moonshine_variant_from_model_name};
-
+#[cfg(not(target_os = "windows"))]
 use crate::engines::parakeet::is_parakeet_model;
 use crate::speaker::{label_speakers, FILTERED_SPEAKER};
 
@@ -80,26 +81,39 @@ impl Engine {
             eyre::bail!("audio file doesn't exist")
         }
 
-        // Route to appropriate engine based on model name
+        // Route to appropriate engine based on model name.
+        // On Windows, moonshine/parakeet are disabled (CRT mismatch), so always false.
+        #[cfg(not(target_os = "windows"))]
         let is_moonshine = is_moonshine_model(&options.model);
+        #[cfg(target_os = "windows")]
+        let is_moonshine = false;
+
+        #[cfg(not(target_os = "windows"))]
         let is_parakeet = is_parakeet_model(&options.model);
+        #[cfg(target_os = "windows")]
+        let is_parakeet = false;
 
         // Ensure/download the appropriate model
-        let _model_path = if is_moonshine {
-            self
-                .models
-                .ensure_moonshine_model(&options.model, cb.progress, cb.is_cancelled.as_deref())
-                .await?
-        } else if is_parakeet {
-            self
-                .models
-                .ensure_parakeet_v3_model(cb.progress, cb.is_cancelled.as_deref())
-                .await?
-        } else {
-            self
-                .models
+        let _model_path = {
+            #[cfg(not(target_os = "windows"))]
+            let p = if is_moonshine {
+                self.models
+                    .ensure_moonshine_model(&options.model, cb.progress, cb.is_cancelled.as_deref())
+                    .await?
+            } else if is_parakeet {
+                self.models
+                    .ensure_parakeet_v3_model(cb.progress, cb.is_cancelled.as_deref())
+                    .await?
+            } else {
+                self.models
+                    .ensure_whisper_model(&options.model, cb.progress, cb.is_cancelled.as_deref())
+                    .await?
+            };
+            #[cfg(target_os = "windows")]
+            let p = self.models
                 .ensure_whisper_model(&options.model, cb.progress, cb.is_cancelled.as_deref())
-                .await?
+                .await?;
+            p
         };
 
         let original_samples = crate::audio::read_wav(&audio_path)?;
@@ -220,53 +234,83 @@ impl Engine {
         let from_lang = options.lang.clone().unwrap_or_else(|| "auto".to_string());
         let whisper_to_en = options.whisper_to_english.unwrap_or(false);
 
-        let (mut segments, detected_lang) = if is_parakeet {
-            // Use Parakeet engine
-            crate::engines::parakeet::transcribe_parakeet(
-                _model_path.as_path(),
-                speech_segments,
-                &options,
-                cb.progress,
-                cb.new_segment_callback,
-                cb.is_cancelled,
-            )
-            .await?
-        } else if is_moonshine {
-            let (variant, _lang) = moonshine_variant_from_model_name(&options.model)
-                .ok_or_else(|| eyre!("Unknown Moonshine model: {}", options.model))?;
+        let (mut segments, detected_lang) = {
+            #[cfg(not(target_os = "windows"))]
+            let result = if is_parakeet {
+                // Use Parakeet engine
+                crate::engines::parakeet::transcribe_parakeet(
+                    _model_path.as_path(),
+                    speech_segments,
+                    &options,
+                    cb.progress,
+                    cb.new_segment_callback,
+                    cb.is_cancelled,
+                )
+                .await?
+            } else if is_moonshine {
+                let (variant, _lang) = moonshine_variant_from_model_name(&options.model)
+                    .ok_or_else(|| eyre!("Unknown Moonshine model: {}", options.model))?;
 
-            crate::engines::moonshine::transcribe_moonshine(
-                _model_path.as_path(),
-                variant,
-                speech_segments,
-                &options,
-                cb.progress,
-                cb.new_segment_callback,
-                cb.is_cancelled,
-            )
-            .await?
-        } else {
-            // Use Whisper engine
-            let ctx = crate::engines::whisper::create_context(
-                _model_path.as_path(),
-                &options.model,
-                self.cfg.gpu_device,
-                self.cfg.use_gpu,
-                self.cfg.enable_dtw,
-                self.cfg.enable_flash_attn,
-                Some(num_samples),
-            )
-            .map_err(|e| eyre!("Failed to create Whisper context: {}", e))?;
+                crate::engines::moonshine::transcribe_moonshine(
+                    _model_path.as_path(),
+                    variant,
+                    speech_segments,
+                    &options,
+                    cb.progress,
+                    cb.new_segment_callback,
+                    cb.is_cancelled,
+                )
+                .await?
+            } else {
+                // Use Whisper engine
+                let ctx = crate::engines::whisper::create_context(
+                    _model_path.as_path(),
+                    &options.model,
+                    self.cfg.gpu_device,
+                    self.cfg.use_gpu,
+                    self.cfg.enable_dtw,
+                    self.cfg.enable_flash_attn,
+                    Some(num_samples),
+                )
+                .map_err(|e| eyre!("Failed to create Whisper context: {}", e))?;
 
-            crate::engines::whisper::run_transcription_pipeline(
-                ctx,
-                speech_segments,
-                options,
-                cb.progress,
-                cb.new_segment_callback,
-                cb.is_cancelled,
-            )
-            .await?
+                crate::engines::whisper::run_transcription_pipeline(
+                    ctx,
+                    speech_segments,
+                    options,
+                    cb.progress,
+                    cb.new_segment_callback,
+                    cb.is_cancelled,
+                )
+                .await?
+            };
+
+            // On Windows: only Whisper is available
+            #[cfg(target_os = "windows")]
+            let result = {
+                let ctx = crate::engines::whisper::create_context(
+                    _model_path.as_path(),
+                    &options.model,
+                    self.cfg.gpu_device,
+                    self.cfg.use_gpu,
+                    self.cfg.enable_dtw,
+                    self.cfg.enable_flash_attn,
+                    Some(num_samples),
+                )
+                .map_err(|e| eyre!("Failed to create Whisper context: {}", e))?;
+
+                crate::engines::whisper::run_transcription_pipeline(
+                    ctx,
+                    speech_segments,
+                    options,
+                    cb.progress,
+                    cb.new_segment_callback,
+                    cb.is_cancelled,
+                )
+                .await?
+            };
+
+            result
         };
 
         // Choose effective language: detected if present, otherwise the user-provided from_lang

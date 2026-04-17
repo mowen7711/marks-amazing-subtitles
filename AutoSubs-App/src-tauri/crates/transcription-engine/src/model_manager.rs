@@ -304,6 +304,7 @@ impl ModelManager {
     }
 
 
+    #[cfg(not(target_os = "windows"))]
     pub async fn ensure_parakeet_v3_model(
         &self,
         progress: Option<&LabeledProgressFn>,
@@ -380,6 +381,7 @@ impl ModelManager {
         bail!("Failed to locate Parakeet model snapshot after download");
     }
 
+    #[cfg(not(target_os = "windows"))]
     pub async fn ensure_moonshine_model(
         &self,
         model: &str,
@@ -614,6 +616,7 @@ impl ModelManager {
 
     /// Delete a cached Moonshine model by name (e.g. "moonshine-tiny", "moonshine-base-es").
     /// Removes the entire model folder from the moonshine cache directory.
+    #[cfg(not(target_os = "windows"))]
     pub fn delete_moonshine_model(&self, model_name: &str) -> Result<()> {
         let folder = model_name
             .strip_prefix("moonshine-")
@@ -633,6 +636,7 @@ impl ModelManager {
 
     /// Delete the cached Parakeet model.
     /// Removes the hf-hub snapshot files for the Parakeet model.
+    #[cfg(not(target_os = "windows"))]
     pub fn delete_parakeet_model(&self) -> Result<()> {
         let cache_dir = self.model_cache_dir()?;
         let parakeet_repo_dir = cache_dir.join("models--istupakov--parakeet-tdt-0.6b-v3-onnx");
@@ -784,31 +788,32 @@ impl ModelManager {
             }
         }
 
-        // Look in the Moonshine cache directory
-        let moonshine_dir = cache_dir.join("moonshine");
-        if moonshine_dir.exists() {
-            let required_files = ["encoder_model.onnx", "decoder_model_merged.onnx", "tokenizer.json"];
-            for entry in fs::read_dir(&moonshine_dir).context("Failed to read moonshine dir")? {
-                let entry = entry?;
-                let path = entry.path();
-                if !path.is_dir() { continue; }
-                // Check that all required model files exist in this folder
-                let all_present = required_files.iter().all(|f| path.join(f).exists());
-                if all_present {
-                    if let Some(folder_name) = path.file_name().and_then(|s| s.to_str()) {
-                        // Map folder name back to model value: "tiny" -> "moonshine-tiny", "base-es" -> "moonshine-base-es"
-                        models.insert(format!("moonshine-{}", folder_name));
+        // Look in the Moonshine cache directory (not available on Windows)
+        #[cfg(not(target_os = "windows"))]
+        {
+            let moonshine_dir = cache_dir.join("moonshine");
+            if moonshine_dir.exists() {
+                let required_files = ["encoder_model.onnx", "decoder_model_merged.onnx", "tokenizer.json"];
+                for entry in fs::read_dir(&moonshine_dir).context("Failed to read moonshine dir")? {
+                    let entry = entry?;
+                    let path = entry.path();
+                    if !path.is_dir() { continue; }
+                    let all_present = required_files.iter().all(|f| path.join(f).exists());
+                    if all_present {
+                        if let Some(folder_name) = path.file_name().and_then(|s| s.to_str()) {
+                            models.insert(format!("moonshine-{}", folder_name));
+                        }
                     }
                 }
             }
-        }
 
-        // Look in the Parakeet cache directory (hf-hub structure)
-        if self.find_cached_snapshot_with_files(
-            "istupakov/parakeet-tdt-0.6b-v3-onnx",
-            &["encoder-model.int8.onnx", "decoder_joint-model.int8.onnx"],
-        ).unwrap_or(None).is_some() {
-            models.insert("parakeet".to_string());
+            // Look in the Parakeet cache directory (hf-hub structure)
+            if self.find_cached_snapshot_with_files(
+                "istupakov/parakeet-tdt-0.6b-v3-onnx",
+                &["encoder-model.int8.onnx", "decoder_joint-model.int8.onnx"],
+            ).unwrap_or(None).is_some() {
+                models.insert("parakeet".to_string());
+            }
         }
 
         if self.find_cached_snapshot_with_files(
@@ -826,9 +831,11 @@ impl ModelManager {
     /// Delete a cached model by name.
     /// Returns true if successfully deleted, false if model doesn't exist or deletion failed.
     pub fn delete_cached_model(&self, model_name: &str) -> bool {
+        #[cfg(not(target_os = "windows"))]
         if model_name.starts_with("moonshine-") {
             return self.delete_moonshine_model(model_name).is_ok();
         }
+        #[cfg(not(target_os = "windows"))]
         if model_name == "parakeet" {
             return self.delete_parakeet_model().is_ok();
         }

@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 whisper-rs = { git = "https://codeberg.org/tazz4843/whisper-rs.git", default-features = false, features = ["tracing_backend"] }
 pyannote-rs = { git = "https://github.com/tmoroney/pyannote-rs", branch = "main"}
-transcribe-rs = { version = "0.2.1", features = ["parakeet", "moonshine"] }
 ort-sys = "=2.0.0-rc.10" # prevents error with pyannote-rs
 hf-hub = "0.4.3"
 dirs = "5.0"
@@ -26,6 +25,16 @@ futures = "0.3"
 tokio = { version = "1", features = ["time", "macros", "rt-multi-thread", "sync"] }
 tokio-util = "0.7"
 unicode-segmentation = "1.11"
+
+# On non-Windows, enable Parakeet and Moonshine alternative ASR models.
+# On Windows, esaxx_rs (pulled in by parakeet/moonshine) links with /MT (static CRT)
+# while the rest of the build uses /MD (dynamic CRT), causing LNK2038/LNK1319.
+# Whisper-rs handles all transcription on Windows so these features aren't needed there.
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+transcribe-rs = { version = "0.2.1", features = ["parakeet", "moonshine"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+transcribe-rs = { version = "0.2.1", default-features = false }
 
 [features]
 coreml = ["whisper-rs/coreml", "pyannote-rs/coreml"]
