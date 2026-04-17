@@ -61,7 +61,7 @@ jobs:
           if (Test-Path "$sdkPath\Bin\glslc.exe") {
             Write-Host "glslc found at $sdkPath\Bin\glslc.exe"
           } else {
-            Write-Error "glslc NOT found — install may have failed"
+            Write-Error "glslc NOT found - install may have failed"
             exit 1
           }
 
