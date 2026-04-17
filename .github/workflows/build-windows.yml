@@ -42,11 +42,11 @@ jobs:
         with:
           workspaces: AutoSubs-App/src-tauri
 
-      - name: Install Vulkan SDK
+      - name: Install Vulkan SDK (with glslc)
         uses: humbletim/setup-vulkan-sdk@v1.2.1
         with:
           vulkan-query-version: latest
-          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-components: Vulkan-Headers, Vulkan-Loader, SPIRV-Tools, Glslang
           vulkan-use-cache: true
 
       - name: Download FFmpeg binary (Windows x86_64)
