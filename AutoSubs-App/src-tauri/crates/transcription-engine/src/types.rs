@@ -24,6 +24,23 @@ pub struct AdvancedTranscribe {
     pub diarize_threshold: Option<f32>, // Threshold for diarization
 }
 
+/// A voice sample used to filter speakers during diarization.
+/// The audio must already be normalised to 16 kHz mono PCM (i16).
+#[derive(Clone, Debug)]
+pub struct VoiceSample {
+    pub label: String,
+    pub samples: Vec<i16>,
+}
+
+/// Path-based reference to a voice sample — used in TranscribeOptions so the
+/// engine can load the PCM itself using the same read_wav path it uses for the
+/// main audio file.
+#[derive(Clone, Debug)]
+pub struct VoiceSamplePath {
+    pub label: String,
+    pub path: String,
+}
+
 // TranscribeOptions references AdvancedTranscribe optionally
 #[derive(Clone, Debug)]
 pub struct TranscribeOptions {
@@ -43,6 +60,11 @@ pub struct TranscribeOptions {
     pub enable_diarize: Option<bool>, // Labels segments with speaker_id
     pub max_speakers: Option<usize>, // Max number of speakers to detect (otherwise auto detection may create too many speakers)
     pub advanced: Option<AdvancedTranscribe>, // Optional knobs
+
+    // Voice sample filtering: when set, only segments whose speaker embedding
+    // matches one of these samples (above voice_similarity_threshold) are kept.
+    pub voice_sample_paths: Option<Vec<VoiceSamplePath>>,
+    pub voice_similarity_threshold: Option<f32>, // Default 0.75
 }
 
 impl Default for TranscribeOptions {
@@ -57,6 +79,8 @@ impl Default for TranscribeOptions {
             enable_diarize: None,
             max_speakers: None,
             advanced: None,
+            voice_sample_paths: None,
+            voice_similarity_threshold: None,
         }
     }
 }

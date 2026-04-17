@@ -27,6 +27,11 @@ export const DEFAULT_SETTINGS: Settings = {
   enableDiarize: false,
   maxSpeakers: null,
 
+  // Voice sample filtering
+  voiceFilterEnabled: false,
+  voiceSamples: [],
+  voiceSimilarityThreshold: 0.75,
+
   // Text settings
   textDensity: "standard",
   maxLinesPerSubtitle: 1,

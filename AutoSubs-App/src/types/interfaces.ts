@@ -52,6 +52,13 @@ export interface Sample {
     start: number;
     end: number;
 }
+
+/** A voice sample used to filter speakers — only matching segments are transcribed. */
+export interface VoiceSample {
+    label: string;
+    path: string;
+}
+
 export interface Speaker {
     name: string;
     style: "Fill" | "Outline";
@@ -103,6 +110,11 @@ export interface Settings {
     enableDTW: boolean,
     enableGpu: boolean,
 
+    // Voice sample filtering
+    voiceFilterEnabled: boolean,
+    voiceSamples: VoiceSample[],
+    voiceSimilarityThreshold: number,
+
     // Text settings
     textDensity: "less" | "standard" | "more" | "single",
     maxLinesPerSubtitle: number,
@@ -136,6 +148,8 @@ export interface TranscriptionOptions {
     maxSpeakers: number | null,
     density: "less" | "standard" | "more" | "single",
     maxLines: number,
+    voiceSamples: VoiceSample[],
+    voiceSimilarityThreshold: number,
 }
 
 // Formatting options for reformatting subtitles without re-transcribing

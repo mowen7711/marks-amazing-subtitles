@@ -568,6 +568,10 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
         maxSpeakers: settings.maxSpeakers,
         density: settings.textDensity,
         maxLines: settings.maxLinesPerSubtitle,
+        voiceSamples: settings.voiceFilterEnabled && settings.enableDiarize
+          ? settings.voiceSamples
+          : [],
+        voiceSimilarityThreshold: settings.voiceSimilarityThreshold,
       }
 
       const transcript = await invoke("transcribe_audio", { options })

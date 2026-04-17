@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 use eyre::eyre;
-use crate::types::{SpeechSegment, DiarizeOptions, LabeledProgressFn, NewSegmentFn, Segment};
+use crate::types::{SpeechSegment, DiarizeOptions, LabeledProgressFn, NewSegmentFn, Segment, VoiceSample};
 use crate::formatting::{process_segments, PostProcessConfig, TextDensity};
 
 use crate::engines::moonshine::{is_moonshine_model, moonshine_variant_from_model_name};
 
 use crate::engines::parakeet::is_parakeet_model;
-use crate::speaker::label_speakers;
+use crate::speaker::{label_speakers, FILTERED_SPEAKER};
 
 // callback type aliases are defined in crate::types
 
@@ -141,13 +141,47 @@ impl Engine {
                 speech_segments.push(SpeechSegment { start: seg.start, end: seg.end, samples: seg.samples, speaker_id: None });
             }
 
+            // Load voice sample PCM from pre-normalised WAV paths (if provided)
+            let voice_samples: Vec<VoiceSample> = options.voice_sample_paths
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .filter_map(|s| {
+                    crate::audio::read_wav(&s.path)
+                        .map(|pcm| VoiceSample { label: s.label.clone(), samples: pcm })
+                        .map_err(|e| {
+                            tracing::warn!("Failed to load voice sample '{}': {:?}", s.label, e);
+                            e
+                        })
+                        .ok()
+                })
+                .collect();
+
+            let has_voice_filter = !voice_samples.is_empty();
+            let voice_samples_opt = if has_voice_filter { Some(voice_samples.as_slice()) } else { None };
+            let voice_threshold = options.voice_similarity_threshold.unwrap_or(0.75);
+
             // Compute speaker IDs once and propagate to all engines
             label_speakers(
                 speech_segments.as_mut_slice(),
                 &diarize_options,
+                voice_samples_opt,
+                voice_threshold,
                 cb.progress,
                 cb.is_cancelled.as_deref(),
             )?;
+
+            // Remove segments that didn't match any voice sample
+            if has_voice_filter {
+                let before = speech_segments.len();
+                speech_segments.retain(|seg| {
+                    seg.speaker_id.as_deref() != Some(FILTERED_SPEAKER)
+                });
+                tracing::info!(
+                    "Voice filter: kept {}/{} segments",
+                    speech_segments.len(), before
+                );
+            }
         } else if let Some(true) = options.enable_vad {
             // Use provided VAD model path if present; otherwise download via ModelManager
             let vad_model_path: PathBuf = if let Some(ref p) = self.cfg.vad_model_path {

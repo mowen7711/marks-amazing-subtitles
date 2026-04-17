@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::time::Instant;
 use tauri::{command, AppHandle, Emitter, Manager, Runtime};
-use transcription_engine::{Engine, EngineConfig, TranscribeOptions, Callbacks, Segment as WDSegment, ProgressType, PostProcessConfig, process_segments, TextDensity};
+use transcription_engine::{Engine, EngineConfig, TranscribeOptions, Callbacks, Segment as WDSegment, ProgressType, PostProcessConfig, process_segments, TextDensity, VoiceSamplePath};
 
 // Frontend-compatible progress data type
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -47,6 +47,15 @@ fn round_to_places(val: f64, places: u32) -> f64 {
     (val * factor).trunc() / factor
 }
 
+/// A voice sample supplied by the frontend — the file at `path` will be
+/// normalised by the Tauri layer before the engine processes it.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontendVoiceSample {
+    pub label: String,
+    pub path: String,
+}
+
 // --- Frontend Options Struct ---
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +72,10 @@ pub struct FrontendTranscribeOptions {
     pub max_speakers: Option<usize>,
     pub density: Option<TextDensity>,
     pub max_lines: Option<usize>,
+    /// Voice samples for speaker filtering. When non-empty, only segments
+    /// whose speaker embedding matches a sample are transcribed.
+    pub voice_samples: Option<Vec<FrontendVoiceSample>>,
+    pub voice_similarity_threshold: Option<f32>,
 }
 
 #[command]
@@ -129,7 +142,7 @@ pub async fn transcribe_audio<R: Runtime>(
     });
 
     // --- Audio Normalization (only task left in app before passing to crate) ---
-    let audio_path = if should_normalize(options.audio_path.clone().into()) {
+    let raw_norm_path = if should_normalize(options.audio_path.clone().into()) {
         create_normalized_audio(app.clone(), options.audio_path.clone().into(), None)
             .await
             .map_err(|e| format!("Failed to normalize audio: {}", e))?
@@ -137,7 +150,54 @@ pub async fn transcribe_audio<R: Runtime>(
         println!("Skip normalize");
         options.audio_path.clone().into()
     };
+
+    // Rename the main audio to a stable name so voice-sample normalization
+    // (which also writes to normalized_audio.wav) cannot overwrite it.
+    let main_audio_dest = raw_norm_path.with_file_name("normalized_main_audio.wav");
+    let audio_path = if raw_norm_path != main_audio_dest {
+        match std::fs::rename(&raw_norm_path, &main_audio_dest) {
+            Ok(()) => main_audio_dest,
+            Err(e) => {
+                tracing::warn!("Could not rename main audio, using original path: {}", e);
+                raw_norm_path
+            }
+        }
+    } else {
+        raw_norm_path
+    };
     println!("Normalized audio path: {}", audio_path.display());
+
+    // --- Normalise voice sample files ---
+    let mut normalised_voice_samples: Vec<VoiceSamplePath> = Vec::new();
+    if let Some(ref frontend_samples) = options.voice_samples {
+        for (i, sample) in frontend_samples.iter().enumerate() {
+            match create_normalized_audio(
+                app.clone(),
+                sample.path.clone().into(),
+                None,
+            ).await {
+                Ok(norm_path) => {
+                    // Rename to a stable per-sample path to avoid collisions
+                    let sample_out = norm_path.with_file_name(format!("voice_sample_{}.wav", i));
+                    if let Err(e) = std::fs::rename(&norm_path, &sample_out) {
+                        tracing::warn!("Could not rename sample {}: {}", i, e);
+                        normalised_voice_samples.push(VoiceSamplePath {
+                            label: sample.label.clone(),
+                            path: norm_path.to_string_lossy().to_string(),
+                        });
+                    } else {
+                        normalised_voice_samples.push(VoiceSamplePath {
+                            label: sample.label.clone(),
+                            path: sample_out.to_string_lossy().to_string(),
+                        });
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to normalise voice sample '{}': {}", sample.label, e);
+                }
+            }
+        }
+    }
 
     // Clone app handle for segment callback and wrap in Arc for thread-safe sharing
     let segment_emit_app = Arc::new(app.clone());
@@ -197,6 +257,14 @@ pub async fn transcribe_audio<R: Runtime>(
             transcribe_options.whisper_to_english = Some(false);
             transcribe_options.translate_target = None;
         }
+
+        // Voice sample filtering
+        transcribe_options.voice_sample_paths = if normalised_voice_samples.is_empty() {
+            None
+        } else {
+            Some(normalised_voice_samples)
+        };
+        transcribe_options.voice_similarity_threshold = options.voice_similarity_threshold;
 
         // Note: GPU is handled internally by the crate based on platform
         // For now, we pass the enable_gpu option if the crate supports it in the future
