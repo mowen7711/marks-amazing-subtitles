@@ -42,29 +42,6 @@ jobs:
         with:
           workspaces: AutoSubs-App/src-tauri
 
-      - name: Install Vulkan SDK (with glslc)
-        # humbletim/setup-vulkan-sdk installs Khronos component repos which do NOT
-        # include glslc (that comes from Google shaderc, bundled only in LunarG SDK).
-        # Install the official LunarG SDK directly so glslc is available for ggml-vulkan.
-        shell: powershell
-        run: |
-          $sdkVersion = "1.3.296.0"
-          $installer = "VulkanSDKInstaller.exe"
-          Write-Host "Downloading Vulkan SDK $sdkVersion..."
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/VulkanSDK-$sdkVersion-Installer.exe" -OutFile $installer
-          Write-Host "Installing Vulkan SDK silently..."
-          Start-Process -FilePath ".\$installer" -Args "/S" -Wait
-          $sdkPath = "C:\VulkanSDK\$sdkVersion"
-          Write-Host "VULKAN_SDK = $sdkPath"
-          echo "VULKAN_SDK=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "$sdkPath\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          if (Test-Path "$sdkPath\Bin\glslc.exe") {
-            Write-Host "glslc found at $sdkPath\Bin\glslc.exe"
-          } else {
-            Write-Error "glslc NOT found - install may have failed"
-            exit 1
-          }
-
       - name: Download FFmpeg binary (Windows x86_64)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,7 +69,10 @@ jobs:
         shell: bash
         run: |
           cd AutoSubs-App
-          npm run tauri build -- -- --no-default-features --features windows
+          # Build with no GPU features for now (avoids Vulkan SDK dependency).
+          # Transcription runs on CPU (AVX2). DirectML/Vulkan can be re-enabled
+          # once the build pipeline is stable.
+          npm run tauri build -- -- --no-default-features
 
       - name: Inject install_path.txt into NSIS installer
         # The Lua script (MarksAmazingSubs.lua) reads install_path.txt from
