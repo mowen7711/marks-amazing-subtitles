@@ -59,10 +59,16 @@ export interface VoiceSample {
     path: string;
 }
 
+export interface ColorModifier {
+    enabled: boolean;
+    color: string;
+}
+
 export interface Speaker {
     name: string;
-    style: "Fill" | "Outline";
-    color: string;
+    fill: ColorModifier;
+    outline: ColorModifier;
+    border: ColorModifier;
     sample: Sample;
     track?: string;
 }
