@@ -895,7 +895,7 @@ local function get_template(rootFolder, templateName)
         return nil
     end
 
-    local template_frame_rate = templateItem:GetClipProperty()["FPS"]
+    local template_frame_rate = tonumber(templateItem:GetClipProperty()["FPS"]) or 24
     return templateItem, template_frame_rate
 end
 
@@ -1028,7 +1028,6 @@ local function build_clip_list(subtitles, speakers, speakersExist, trackIndex, t
 
         local newClip = {
             mediaPoolItem = templateItem,
-            mediaType = 1,
             startFrame = 0,
             endFrame = duration,
             recordFrame = timeline_pos,
@@ -1059,15 +1058,36 @@ local function to_word_timing(transcript_words, frameRate, segmentStart)
     return result
 end
 
+local function get_fusion_comp(timelineItem)
+    -- Resolve 20 changed when Fusion comps are accessible after AppendToTimeline.
+    -- GetFusionCompCount() may return 0 on freshly-appended clips even when a comp
+    -- exists, so we always attempt GetFusionCompByIndex(1) and rely on pcall for safety.
+    local comp = nil
+    local ok = pcall(function()
+        comp = timelineItem:GetFusionCompByIndex(1)
+    end)
+    if not ok or comp == nil then
+        -- Fallback: try index 0 (some builds use 0-based indexing)
+        pcall(function()
+            comp = timelineItem:GetFusionCompByIndex(0)
+        end)
+    end
+    return comp
+end
+
 local function apply_subtitle_text(timelineItems, subtitles, speakers, speakersExist, isAnimated)
     for i, timelineItem in ipairs(timelineItems) do
         local success, err = pcall(function()
             local subtitle = subtitles[i]
             local subtitleText = subtitle["text"]
 
-            if timelineItem:GetFusionCompCount() > 0 then
-                local comp = timelineItem:GetFusionCompByIndex(1)
+            local comp = get_fusion_comp(timelineItem)
+            if comp ~= nil then
                 local template = comp:FindTool("Template")
+                if template == nil then
+                    print("[AutoSubs] Warning: 'Template' tool not found in Fusion comp for clip " .. i)
+                    return
+                end
                 if isAnimated then
                     local framerate = tonumber(comp:GetPrefs("Comp.FrameFormat.Rate"))
                     local wordTiming = to_word_timing(subtitle.words, framerate, subtitle.start)
@@ -1085,6 +1105,8 @@ local function apply_subtitle_text(timelineItems, subtitles, speakers, speakersE
                 end
 
                 timelineItem:SetClipColor("Green") -- Visualise updated clips
+            else
+                print("[AutoSubs] Warning: No Fusion comp accessible for clip " .. i .. " (Resolve 20+: try reopening the script)")
             end
         end)
 
@@ -1229,7 +1251,7 @@ function GeneratePreview(speaker, templateName, exportDir)
         return ""
     end
 
-    local templateFrameRate = templateItem:GetClipProperty()["FPS"]
+    local templateFrameRate = tonumber(templateItem:GetClipProperty()["FPS"]) or 24
     timeline:AddTrack("video")
     local trackIndex = timeline:GetTrackCount("video")
 

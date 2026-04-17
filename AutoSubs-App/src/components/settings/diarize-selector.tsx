@@ -96,6 +96,11 @@ export function SpeakerSelector() {
                                 <Label className="text-sm font-medium flex items-center gap-1.5">
                                     <Mic className="w-3.5 h-3.5" />
                                     Voice Filter
+                                    {settings.voiceFilterEnabled && settings.voiceSamples.length > 0 && (
+                                        <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+                                            {settings.voiceSamples.length}
+                                        </span>
+                                    )}
                                 </Label>
                                 <p className="text-xs text-muted-foreground">
                                     Only transcribe segments matching sample voices
@@ -112,6 +117,11 @@ export function SpeakerSelector() {
                         {settings.voiceFilterEnabled && (
                             <div className="space-y-3">
                                 {/* Sample list */}
+                                {settings.voiceSamples.length === 0 && (
+                                    <p className="text-xs text-muted-foreground text-center py-1">
+                                        Add a short audio clip of your voice to filter out background speakers
+                                    </p>
+                                )}
                                 {settings.voiceSamples.length > 0 && (
                                     <div className="space-y-2">
                                         {settings.voiceSamples.map((sample, index) => (

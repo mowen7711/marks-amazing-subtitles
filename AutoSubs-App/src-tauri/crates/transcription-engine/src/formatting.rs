@@ -29,6 +29,23 @@ struct Tok {
     pub leading_space: bool, // whether original token text began with a space/newline
 }
 
+/// Returns true if the text token represents a non-speech noise marker that
+/// should be silently dropped (e.g. "[inaudible]", "(music)", "[BLANK_AUDIO]").
+fn is_noise_token(text: &str) -> bool {
+    let t = text.trim().to_lowercase();
+    // Strip surrounding bracket/paren pairs before matching
+    let inner = t
+        .trim_start_matches(['[', '('])
+        .trim_end_matches([']', ')'])
+        .trim();
+    matches!(
+        inner,
+        "inaudible" | "blank_audio" | "blank audio" | "silence"
+            | "music" | "background music" | "noise" | "laughter"
+            | "applause" | "crosstalk" | "unintelligible" | "indistinct"
+    )
+}
+
 #[inline]
 fn round3(x: f64) -> f64 { (x * 1000.0).round() / 1000.0 }
 
@@ -195,16 +212,19 @@ pub fn process_segments(
     cfg: &PostProcessConfig,
 ) -> Vec<Segment> {
     // 1) Collect words from all segments, keep speaker_id continuity.
+    //    Noise/inaudible tokens are dropped here so they never reach the output.
     let mut all: Vec<(Option<String>, WordTimestamp)> = Vec::new();
     for seg in segments {
         let speaker = seg.speaker_id.clone();
         if let Some(ws) = &seg.words {
             for w in ws {
-                all.push((speaker.clone(), w.clone()));
+                if !is_noise_token(&w.text) {
+                    all.push((speaker.clone(), w.clone()));
+                }
             }
         } else {
             // fallback: treat the whole segment as one word if needed
-            if !seg.text.trim().is_empty() {
+            if !seg.text.trim().is_empty() && !is_noise_token(&seg.text) {
                 all.push((speaker.clone(), WordTimestamp {
                     text: seg.text.clone(), start: seg.start, end: seg.end, probability: None,
                 }));

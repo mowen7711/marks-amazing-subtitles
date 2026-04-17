@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Speech, Type, AudioLines, Globe, X, PlayCircle } from "lucide-react"
+import { Speech, Type, AudioLines, Globe, X, PlayCircle, Mic } from "lucide-react"
 import { open } from "@tauri-apps/plugin-dialog"
 import { invoke } from "@tauri-apps/api/core"
 import { downloadDir } from "@tauri-apps/api/path"
@@ -290,7 +290,7 @@ function TranscriptionPanelView({
                     size="default"
                     role="combobox"
                     aria-expanded={openSpeakerPopover}
-                    className="dark:bg-background dark:hover:bg-accent rounded-full"
+                    className="dark:bg-background dark:hover:bg-accent rounded-full relative"
                   >
                     <Speech className="h-4 w-4" />
                     <span className="text-xs">
@@ -298,6 +298,11 @@ function TranscriptionPanelView({
                         ? currentSettings.maxSpeakers === null ? t("actionBar.common.auto") : currentSettings.maxSpeakers
                         : t("actionBar.common.off")}
                     </span>
+                    {currentSettings.enableDiarize && currentSettings.voiceFilterEnabled && currentSettings.voiceSamples.length > 0 && (
+                      <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary">
+                        <Mic className="h-2 w-2 text-primary-foreground" />
+                      </span>
+                    )}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-72 p-0" side="top">
