@@ -78,38 +78,48 @@ jobs:
         # The Lua script (MarksAmazingSubs.lua) reads install_path.txt from
         #   %APPDATA%\...\Scripts\Utility\MarksAmazingSubs\install_path.txt
         # to find the app .exe.  The default Tauri NSIS installer doesn't write
-        # this file, so we patch the installer with NSIS's /X command to add a
-        # step that writes the file after installation.
+        # this file, so we build a wrapper NSIS installer that:
+        #   1. Bundles + runs the original Tauri installer silently
+        #   2. Writes install_path.txt pointing at the per-user install location
+        #   3. Copies MarksAmazingSubs.lua into DaVinci Resolve's scripts folder
+        #
+        # IMPORTANT: The original installer is bundled at NSIS compile-time via the
+        # File command.  ExecWait then runs it from $PLUGINSDIR so the path is valid
+        # on the end-user's machine (not the CI runner absolute path).
+        #
+        # Install path: Tauri 2 NSIS default (no installMode set) is currentUser,
+        # which installs to %LOCALAPPDATA%\Programs\<productName>.
         shell: powershell
         run: |
           $nsisDir = "AutoSubs-App\src-tauri\target\release\bundle\nsis"
           $exePath = Get-ChildItem "$nsisDir\*.exe" | Select-Object -First 1 -ExpandProperty FullName
           if (-not $exePath) { Write-Error "No NSIS exe found"; exit 1 }
 
-          # We can't easily modify a compiled NSIS installer, so we create a
-          # small wrapper NSIS script that runs the original installer silently
-          # then writes install_path.txt.
+          # Stage files that NSIS needs to bundle at compile time
+          Copy-Item $exePath "original-setup.exe"
+          Copy-Item "AutoSubs-App\src-tauri\resources\MarksAmazingSubs.lua" "MarksAmazingSubs.lua"
+
           $wrapperNsi = @"
-          !include "LogicLib.nsh"
           OutFile "MarksAmazingSubs-windows-x86_64-setup.exe"
-          RequestExecutionLevel admin
-          SilentInstall silent
+          RequestExecutionLevel user
 
           Section
-            ; Run the original installer
-            ExecWait '"$exePath" /S'
+            ; Bundle + extract the Tauri installer so the path is valid on the user's machine
+            InitPluginsDir
+            SetOutPath "`$PLUGINSDIR"
+            File "original-setup.exe"
+            ExecWait '"`$PLUGINSDIR\original-setup.exe" /S'
 
-            ; Write install_path.txt so the Lua bridge can find the app
-            Var /GLOBAL installDir
-            StrCpy `$installDir "`$PROGRAMFILES64\Marks Amazing Subtitles"
+            ; Write install_path.txt so the Lua bridge can find the app.
+            ; Tauri 2 currentUser NSIS default: %LOCALAPPDATA%\Programs\<productName>
             SetOutPath "`$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\MarksAmazingSubs"
             FileOpen `$0 install_path.txt w
-            FileWrite `$0 "`$installDir"
+            FileWrite `$0 "`$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
             FileClose `$0
 
-            ; Also copy the Lua entry-point script to Resolve's scripts folder
+            ; Copy the Lua entry-point script to Resolve's scripts folder
             SetOutPath "`$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
-            File "AutoSubs-App\src-tauri\resources\MarksAmazingSubs.lua"
+            File "MarksAmazingSubs.lua"
           SectionEnd
           "@
           $wrapperNsi | Out-File -FilePath wrapper.nsi -Encoding utf8
