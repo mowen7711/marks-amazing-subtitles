@@ -232,7 +232,7 @@ fn main() {
                     // Windows: do a small blocking send inline so we don't exit before the request is on the wire
                     #[cfg(target_os = "windows")]
                     {
-                        let url = "http://127.0.0.1:56002/";
+                        let url = "http://127.0.0.1:56003/";
                         let bc = reqwest::blocking::Client::builder()
                             .no_proxy()
                             .tcp_nodelay(true)
@@ -252,11 +252,11 @@ fn main() {
                             use std::net::TcpStream;
                             let body = b"{\"func\":\"Exit\"}";
                             let req = format!(
-                                "POST / HTTP/1.1\r\nHost: 127.0.0.1:56002\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                                "POST / HTTP/1.1\r\nHost: 127.0.0.1:56003\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
                                 body.len()
                             );
                             if let Ok(mut stream) = TcpStream::connect_timeout(
-                                &"127.0.0.1:56002".parse().unwrap(),
+                                &"127.0.0.1:56003".parse().unwrap(),
                                 Duration::from_millis(400),
                             ) {
                                 let _ = stream.set_nodelay(true);
@@ -292,7 +292,7 @@ fn main() {
                                 .build()
                                 .unwrap_or_else(|_| Client::new());
 
-                            let url = "http://127.0.0.1:56002/";
+                            let url = "http://127.0.0.1:56003/";
                             let _ = client
                                 .post(url)
                                 .header("Connection", "close")

@@ -3,7 +3,7 @@ import { downloadDir } from '@tauri-apps/api/path';
 import { getTranscriptPath } from '@/utils/file-utils';
 import { Speaker } from '@/types/interfaces';
 
-const resolveAPI = "http://localhost:56002/";
+const resolveAPI = "http://localhost:56003/";
 
 export async function exportAudio(inputTracks: Array<string>) {
   const outputDir = await downloadDir();

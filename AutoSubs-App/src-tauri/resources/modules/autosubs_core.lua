@@ -6,8 +6,8 @@ local resolve = Resolve()
 
 local DEV_MODE = false
 
--- Server Port
-local PORT = 56002
+-- Server Port (56003 for Marks Amazing Subtitles — original AutoSubs uses 56002)
+local PORT = 56003
 
 -- Windows FFI bindings for wide-character file operations to handle special characters in paths
 if ffi.os == "Windows" then

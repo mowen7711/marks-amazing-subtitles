@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
-  "productName": "AutoSubs",
+  "productName": "Marks Amazing Subtitles",
   "version": "3.5.0",
-  "identifier": "com.autosubs",
+  "identifier": "com.marks-amazing-subtitles",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -65,8 +65,8 @@
     "linux": {
       "deb": {
         "files": {
-          "/opt/resolve/Fusion/Scripts/Utility/AutoSubs.lua": "resources/AutoSubs.lua",
-          "/opt/resolve/Fusion/Scripts/Utility/AutoSubs": "resources/AutoSubs/"
+          "/opt/resolve/Fusion/Scripts/Utility/MarksAmazingSubs.lua": "resources/MarksAmazingSubs.lua",
+          "/opt/resolve/Fusion/Scripts/Utility/MarksAmazingSubs": "resources/AutoSubs/"
         }
       }
     },
