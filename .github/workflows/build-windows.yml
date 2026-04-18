@@ -143,21 +143,20 @@ jobs:
           Copy-Item $exePath "original-setup.exe"
           Copy-Item "AutoSubs-App\src-tauri\resources\MarksAmazingSubs.lua" "MarksAmazingSubs.lua"
 
-          # Only include onnxruntime.dll section if the DLL was actually found
+          # Only include onnxruntime.dll section if the DLL was actually found.
+          # Build as a plain string — no nested here-string (closing "@ must be
+          # at column 0 in PS, but YAML block scalars require indentation).
           $ortLinkMode = Get-Content "ort-link-mode.txt" -ErrorAction SilentlyContinue
-          $dllSection = ""
+          $dllLines = @()
           if ($ortLinkMode -eq "dynamic") {
             Write-Host "Including onnxruntime.dll in installer (dynamic ort)"
-            $dllSection = @"
-
-            ; Copy onnxruntime.dll into the app directory.
-            ; Required when ort is dynamically linked (no DLL = app exits silently).
-            SetOutPath "`$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
-            File "onnxruntime.dll"
-"@
+            $dllLines += "            ; ort is dynamically linked - install the ONNX Runtime DLL"
+            $dllLines += "            SetOutPath `"`$LOCALAPPDATA\Programs\Marks Amazing Subtitles`""
+            $dllLines += "            File `"onnxruntime.dll`""
           } else {
             Write-Host "Skipping onnxruntime.dll (ort is statically linked)"
           }
+          $dllSection = $dllLines -join "`n"
 
           $wrapperNsi = @"
           OutFile "MarksAmazingSubs-windows-x86_64-setup.exe"
