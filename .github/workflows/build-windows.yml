@@ -76,24 +76,39 @@ jobs:
 
       - name: Locate and stage onnxruntime.dll
         # pyannote-rs uses the ort crate (ONNX Runtime) for speaker diarization.
-        # ort's copy-dylibs feature (enabled by default) copies onnxruntime.dll
-        # into target/release/ alongside the binary, but Tauri's NSIS bundler
-        # does NOT automatically include arbitrary DLLs from that directory.
-        # Without the DLL, the app exits silently at startup (DLL not found).
-        # We stage the DLL here so the NSIS wrapper can install it to the app dir.
+        # ort's copy-dylibs feature copies onnxruntime.dll next to the binary,
+        # but only if that feature is enabled by the dependency chain.
+        # When copy-dylibs is absent the DLL stays inside the Cargo build OUT_DIR
+        # (target/release/build/ort-sys-*/out/...) instead of target/release/.
+        # Tauri's NSIS bundler never includes arbitrary DLLs, so we find and
+        # stage it here regardless of which location ort chose.
         shell: powershell
         run: |
           $releaseDir = "AutoSubs-App\src-tauri\target\release"
 
-          # Primary location: ort copy-dylibs places it next to the binary
+          # 1. copy-dylibs: placed next to the binary
           $dll = Get-Item "$releaseDir\onnxruntime.dll" -ErrorAction SilentlyContinue
 
-          # Fallback: search the ort download cache
+          # 2. No copy-dylibs: DLL stays in the Cargo build OUT_DIR
+          #    (target/release/build/ort-sys-<hash>/out/ or similar)
           if (-not $dll) {
-            Write-Host "Not in release dir, searching ort download cache..."
-            $ortCache = "$env:LOCALAPPDATA\ort.pyke.io\dfbin\x86_64-pc-windows-msvc"
-            $dll = Get-ChildItem $ortCache -Recurse -Filter "onnxruntime.dll" -ErrorAction SilentlyContinue `
-              | Select-Object -First 1
+            Write-Host "Not in release dir, searching Cargo build directory..."
+            $dll = Get-ChildItem "$releaseDir\build" -Recurse -Filter "onnxruntime.dll" `
+              -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+
+          # 3. ort global download cache (older ort versions used this path)
+          if (-not $dll) {
+            Write-Host "Not in build dir, searching ort download cache..."
+            $dll = Get-ChildItem "$env:LOCALAPPDATA\ort.pyke.io" -Recurse -Filter "onnxruntime.dll" `
+              -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+
+          # 4. Last resort: scan the entire target tree
+          if (-not $dll) {
+            Write-Host "Scanning entire target tree..."
+            $dll = Get-ChildItem "AutoSubs-App\src-tauri\target" -Recurse -Filter "onnxruntime.dll" `
+              -ErrorAction SilentlyContinue | Select-Object -First 1
           }
 
           if ($dll) {
@@ -101,7 +116,7 @@ jobs:
             Write-Host "Size: $([math]::Round($dll.Length / 1MB, 1)) MB"
             Copy-Item $dll.FullName "onnxruntime.dll"
           } else {
-            Write-Error "onnxruntime.dll not found - the app will not start on Windows (DLL not found)"
+            Write-Error "onnxruntime.dll not found anywhere in the build tree - the app will not start on Windows"
             exit 1
           }
 
