@@ -168,7 +168,7 @@ jobs:
             SetOutPath "`$PLUGINSDIR"
             File "original-setup.exe"
             ExecWait '"`$PLUGINSDIR\original-setup.exe" /S'
-$dllSection
+          $dllSection
 
             ; Write install_path.txt so the Lua bridge can find the app.
             ; Tauri 2 currentUser NSIS default: %LOCALAPPDATA%\Programs\<productName>
