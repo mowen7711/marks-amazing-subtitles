@@ -79,32 +79,41 @@ jobs:
           cp "$exe" original-setup.exe
           cp AutoSubs-App/src-tauri/resources/MarksAmazingSubs.lua MarksAmazingSubs.lua
 
+          echo "Downloading VC++ 2015-2022 redistributable..."
+          curl -sSL "https://aka.ms/vs/17/release/vc_redist.x64.exe" -o vc_redist.x64.exe
+          echo "vc_redist.x64.exe size: $(wc -c < vc_redist.x64.exe) bytes"
+
       - name: Write NSIS wrapper script
         shell: bash
         run: |
           cat > wrapper.nsi << 'NSIS_END'
-          OutFile "MarksAmazingSubs-windows-x86_64-setup.exe"
-          RequestExecutionLevel user
+OutFile "MarksAmazingSubs-windows-x86_64-setup.exe"
+RequestExecutionLevel user
 
-          Section
-            ; Run the Tauri installer silently from a temp path
-            InitPluginsDir
-            SetOutPath "$PLUGINSDIR"
-            File "original-setup.exe"
-            ExecWait '"$PLUGINSDIR\original-setup.exe" /S'
+Section
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
 
-            ; Write install_path.txt so the Lua bridge can find the app.
-            ; Tauri 2 per-user default: %LOCALAPPDATA%\Programs\<productName>
-            SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\MarksAmazingSubs"
-            FileOpen $0 install_path.txt w
-            FileWrite $0 "$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
-            FileClose $0
+  ; Install VC++ 2015-2022 redistributable (required by the app)
+  File "vc_redist.x64.exe"
+  ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /quiet /norestart'
 
-            ; Install the Lua entry-point script into DaVinci Resolve's scripts folder
-            SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
-            File "MarksAmazingSubs.lua"
-          SectionEnd
-          NSIS_END
+  ; Run the Tauri installer silently
+  File "original-setup.exe"
+  ExecWait '"$PLUGINSDIR\original-setup.exe" /S'
+
+  ; Write install_path.txt so the Lua bridge can find the app.
+  ; Tauri 2 per-user default: %LOCALAPPDATA%\Programs\<productName>
+  SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\MarksAmazingSubs"
+  FileOpen $0 install_path.txt w
+  FileWrite $0 "$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
+  FileClose $0
+
+  ; Install the Lua entry-point script into DaVinci Resolve's scripts folder
+  SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
+  File "MarksAmazingSubs.lua"
+SectionEnd
+NSIS_END
 
       - name: Compile NSIS wrapper
         shell: bash
