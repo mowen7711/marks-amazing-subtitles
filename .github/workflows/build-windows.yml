@@ -185,25 +185,27 @@ jobs:
           $wrapperNsi | Out-File -FilePath wrapper.nsi -Encoding utf8
           Write-Host "Wrapper NSIS script created"
 
-      - name: Compile wrapper installer (if NSIS available)
+      - name: Compile wrapper installer
         shell: powershell
         run: |
-          # Try to use NSIS if present; fall back to renaming the raw installer
           $nsisBin = "C:\Program Files (x86)\NSIS\makensis.exe"
-          $rawExe = (Get-ChildItem "AutoSubs-App\src-tauri\target\release\bundle\nsis\*.exe" | Select-Object -First 1).FullName
+          if (-not (Test-Path $nsisBin)) {
+            Write-Error "NSIS not found at $nsisBin - cannot build wrapper installer"
+            exit 1
+          }
+          Write-Host "NSIS found: $nsisBin"
 
-          if (Test-Path $nsisBin) {
-            & $nsisBin wrapper.nsi
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "Wrapper compile failed - falling back to raw installer"
-              Copy-Item $rawExe "MarksAmazingSubs-windows-x86_64-setup.exe"
-            }
-          } else {
-            Write-Host "NSIS not found on runner - using raw Tauri installer"
-            Copy-Item $rawExe "MarksAmazingSubs-windows-x86_64-setup.exe"
+          Write-Host "=== wrapper.nsi ==="
+          Get-Content wrapper.nsi
+          Write-Host "=== end wrapper.nsi ==="
+
+          & $nsisBin wrapper.nsi
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "makensis failed with exit code $LASTEXITCODE"
+            exit 1
           }
 
-          Write-Host "Final installer: MarksAmazingSubs-windows-x86_64-setup.exe"
+          Write-Host "Final installer:"
           Get-Item "MarksAmazingSubs-windows-x86_64-setup.exe"
 
       - name: Upload installer to GitHub Release
