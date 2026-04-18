@@ -15,6 +15,23 @@ local function join_path(dir, filename)
     end
 end
 
+-- Simple logger: prints to Resolve console and appends to a log file in TEMP.
+-- Useful for diagnosing startup issues when the app itself cannot run.
+local log_path = nil
+local function log(msg)
+    local ts = os.date("%Y-%m-%d %H:%M:%S")
+    local line = "[" .. ts .. "] " .. tostring(msg)
+    print(line)
+    -- Write to a log file alongside other temp files so it survives app crashes
+    if log_path then
+        local f = io.open(log_path, "a")
+        if f then
+            f:write(line .. "\n")
+            f:close()
+        end
+    end
+end
+
 -- Helper to convert a UTF-8 string to a wide-character (WCHAR) string
 local function to_wide_string(str)
     local len = #str + 1 -- Include null terminator
@@ -58,7 +75,7 @@ end
 
 -- Detect the operating system
 local os_name = ffi.os
-print("Operating System: " .. os_name)
+log("MarksAmazingSubs.lua starting on OS: " .. os_name)
 
 -- Path to the script to launch
 local resources_folder = nil
@@ -82,13 +99,46 @@ if os_name == "Windows" then
         int fclose(void* stream);
     ]]
 
+    -- Set log path now that we know we're on Windows
+    local temp_dir = os.getenv("TEMP") or os.getenv("TMP") or "C:\\Temp"
+    log_path = temp_dir .. "\\MarksAmazingSubs_launch.log"
+    log("Log file: " .. log_path)
+
     -- Get path to the Marks Amazing Subtitles app and modules.
     -- The installer writes the actual install path into install_path.txt inside this folder.
     local storage_path = os.getenv("APPDATA") ..
         "\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility\\MarksAmazingSubs"
-    local install_path = assert(read_file(join_path(storage_path, "install_path.txt")))
+    log("Reading install_path.txt from: " .. storage_path)
+
+    local ok, result = pcall(read_file, join_path(storage_path, "install_path.txt"))
+    if not ok then
+        local err = "Could not read install_path.txt: " .. tostring(result) ..
+            "\nRun the MarksAmazingSubs installer first, then restart DaVinci Resolve."
+        log("ERROR: " .. err)
+        error(err)
+    end
+
+    local install_path = result:gsub("%s+$", "") -- trim trailing whitespace/newlines
+    log("Install path: " .. install_path)
+
     app_executable = install_path .. "\\Marks Amazing Subtitles.exe"
     resources_folder = install_path .. "\\resources"
+
+    log("App executable: " .. app_executable)
+    log("Resources folder: " .. resources_folder)
+
+    -- Verify the executable exists before trying to launch it
+    local exe_check = io.open(app_executable, "rb")
+    if exe_check then
+        exe_check:close()
+        log("Executable found OK")
+    else
+        local err = "App executable not found at: " .. app_executable ..
+            "\nThe app may not be installed correctly. Try reinstalling from the setup .exe."
+        log("ERROR: " .. err)
+        error(err)
+    end
+
 elseif os_name == "OSX" then
     app_executable = "/Applications/Marks Amazing Subtitles.app"
     resources_folder = app_executable .. "/Contents/Resources/resources"
@@ -102,12 +152,24 @@ if DEV_MODE then
     resources_folder = os.getenv("HOME") .. "/Documents/auto-subs/AutoSubs-App/src-tauri/resources"
 end
 
+log("Loading autosubs_core module from: " .. resources_folder)
+
 -- Set package path for module loading
 local modules_path = join_path(resources_folder, "modules")
 package.path = package.path .. ";" .. join_path(modules_path, "?.lua")
 
 -- Launch Marks Amazing Subtitles
-local App = require("autosubs_core")
-App:Init(app_executable, resources_folder, DEV_MODE)
+log("Calling App:Init...")
+local ok, err = pcall(function()
+    local App = require("autosubs_core")
+    App:Init(app_executable, resources_folder, DEV_MODE)
+end)
+
+if not ok then
+    log("ERROR launching app: " .. tostring(err))
+    error(err)
+end
+
+log("App:Init returned successfully")
 
 _G.AUTOSUBS_DEV_MODE = nil

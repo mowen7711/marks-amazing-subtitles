@@ -74,18 +74,49 @@ jobs:
           # once the build pipeline is stable.
           npm run tauri build -- -- --no-default-features
 
+      - name: Locate and stage onnxruntime.dll
+        # pyannote-rs uses the ort crate (ONNX Runtime) for speaker diarization.
+        # ort's copy-dylibs feature (enabled by default) copies onnxruntime.dll
+        # into target/release/ alongside the binary, but Tauri's NSIS bundler
+        # does NOT automatically include arbitrary DLLs from that directory.
+        # Without the DLL, the app exits silently at startup (DLL not found).
+        # We stage the DLL here so the NSIS wrapper can install it to the app dir.
+        shell: powershell
+        run: |
+          $releaseDir = "AutoSubs-App\src-tauri\target\release"
+
+          # Primary location: ort copy-dylibs places it next to the binary
+          $dll = Get-Item "$releaseDir\onnxruntime.dll" -ErrorAction SilentlyContinue
+
+          # Fallback: search the ort download cache
+          if (-not $dll) {
+            Write-Host "Not in release dir, searching ort download cache..."
+            $ortCache = "$env:LOCALAPPDATA\ort.pyke.io\dfbin\x86_64-pc-windows-msvc"
+            $dll = Get-ChildItem $ortCache -Recurse -Filter "onnxruntime.dll" -ErrorAction SilentlyContinue `
+              | Select-Object -First 1
+          }
+
+          if ($dll) {
+            Write-Host "Found onnxruntime.dll at: $($dll.FullName)"
+            Write-Host "Size: $([math]::Round($dll.Length / 1MB, 1)) MB"
+            Copy-Item $dll.FullName "onnxruntime.dll"
+          } else {
+            Write-Error "onnxruntime.dll not found - the app will not start on Windows (DLL not found)"
+            exit 1
+          }
+
       - name: Inject install_path.txt into NSIS installer
         # The Lua script (MarksAmazingSubs.lua) reads install_path.txt from
         #   %APPDATA%\...\Scripts\Utility\MarksAmazingSubs\install_path.txt
         # to find the app .exe.  The default Tauri NSIS installer doesn't write
         # this file, so we build a wrapper NSIS installer that:
         #   1. Bundles + runs the original Tauri installer silently
-        #   2. Writes install_path.txt pointing at the per-user install location
-        #   3. Copies MarksAmazingSubs.lua into DaVinci Resolve's scripts folder
+        #   2. Copies onnxruntime.dll into the app directory (required to start)
+        #   3. Writes install_path.txt pointing at the per-user install location
+        #   4. Copies MarksAmazingSubs.lua into DaVinci Resolve's scripts folder
         #
-        # IMPORTANT: The original installer is bundled at NSIS compile-time via the
-        # File command.  ExecWait then runs it from $PLUGINSDIR so the path is valid
-        # on the end-user's machine (not the CI runner absolute path).
+        # IMPORTANT: All files are bundled at NSIS compile-time via File commands
+        # so paths are valid on the end-user's machine (not the CI runner paths).
         #
         # Install path: Tauri 2 NSIS default (no installMode set) is currentUser,
         # which installs to %LOCALAPPDATA%\Programs\<productName>.
@@ -98,6 +129,7 @@ jobs:
           # Stage files that NSIS needs to bundle at compile time
           Copy-Item $exePath "original-setup.exe"
           Copy-Item "AutoSubs-App\src-tauri\resources\MarksAmazingSubs.lua" "MarksAmazingSubs.lua"
+          # onnxruntime.dll was staged by the previous step
 
           $wrapperNsi = @"
           OutFile "MarksAmazingSubs-windows-x86_64-setup.exe"
@@ -109,6 +141,12 @@ jobs:
             SetOutPath "`$PLUGINSDIR"
             File "original-setup.exe"
             ExecWait '"`$PLUGINSDIR\original-setup.exe" /S'
+
+            ; Copy onnxruntime.dll into the app directory.
+            ; The app uses ort (ONNX Runtime) for speaker diarization. Without this
+            ; DLL the app exits silently at startup with a DLL not found error.
+            SetOutPath "`$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
+            File "onnxruntime.dll"
 
             ; Write install_path.txt so the Lua bridge can find the app.
             ; Tauri 2 currentUser NSIS default: %LOCALAPPDATA%\Programs\<productName>
