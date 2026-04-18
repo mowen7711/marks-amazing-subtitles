@@ -80,10 +80,10 @@ pub struct FrontendTranscribeOptions {
 
 #[command]
 pub async fn cancel_transcription() -> Result<(), String> {
-    println!("Cancellation requested");
+    tracing::info!(target: "autosubs", "Cancellation requested");
     if let Ok(mut should_cancel) = SHOULD_CANCEL.lock() {
         *should_cancel = true;
-        println!("Cancellation flag set to true");
+        tracing::debug!(target: "autosubs", "Cancellation flag set");
     } else {
         return Err("Failed to acquire cancellation lock".to_string());
     }
@@ -96,7 +96,14 @@ pub async fn transcribe_audio<R: Runtime>(
     options: FrontendTranscribeOptions,
 ) -> Result<Transcript, String> {
     let start_time = Instant::now();
-    println!("Starting transcription with options: {:?}", options);
+    tracing::info!(
+        target: "autosubs",
+        model = %options.model,
+        lang = ?options.lang,
+        diarize = ?options.enable_diarize,
+        translate = ?options.translate,
+        "Transcription requested"
+    );
 
     // Reset progress and cancellation state
     LATEST_PROGRESS.store(0, Ordering::Relaxed);
@@ -109,7 +116,23 @@ pub async fn transcribe_audio<R: Runtime>(
     if let Ok(mut should_cancel) = SHOULD_CANCEL.lock() {
         *should_cancel = false;
     }
-    println!("Cancellation flag reset to false");
+    tracing::debug!(target: "autosubs", "Cancellation flag reset");
+
+    // Create job log — records each pipeline step to logs/jobs/
+    let mut job = crate::logging::new_job_log(&app, format!("Transcription [{}]", options.model));
+    job.step("Options", &format!(
+        "model={} lang={} diarize={} translate={} target_lang={} gpu={} dtw={} max_lines={:?} density={:?} voice_samples={}",
+        options.model,
+        options.lang.as_deref().unwrap_or("auto"),
+        options.enable_diarize.unwrap_or(false),
+        options.translate.unwrap_or(false),
+        options.target_language.as_deref().unwrap_or("none"),
+        options.enable_gpu.unwrap_or(true),
+        options.enable_dtw.unwrap_or(true),
+        options.max_lines,
+        options.density,
+        options.voice_samples.as_ref().map_or(0, |v| v.len()),
+    ));
 
     let emit_app = app.clone();
     let (stop_tx, mut stop_rx) = tokio::sync::oneshot::channel::<()>();
@@ -124,9 +147,8 @@ pub async fn transcribe_audio<R: Runtime>(
                     let progress = LATEST_PROGRESS.load(Ordering::Relaxed).clamp(0, 100);
                     let progress_type = LATEST_PROGRESS_TYPE.lock().unwrap().clone();
                     let progress_label = LATEST_PROGRESS_LABEL.lock().unwrap().clone();
-                    
+
                     if progress != last_progress || progress_type != last_progress_type || progress_label != last_progress_label {
-                        // Emit labeled progress with type and label
                         let labeled_progress = LabeledProgress::from((&progress, &progress_type, &progress_label));
                         let _ = emit_app.emit("labeled-progress", labeled_progress);
                         last_progress = progress;
@@ -141,15 +163,28 @@ pub async fn transcribe_audio<R: Runtime>(
         }
     });
 
-    // --- Audio Normalization (only task left in app before passing to crate) ---
+    // --- Audio Normalization ---
+    let audio_input_name = std::path::Path::new(&options.audio_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let norm_start = Instant::now();
+
     let raw_norm_path = if should_normalize(options.audio_path.clone().into()) {
+        job.step("Audio normalization", &format!("input={}", audio_input_name));
         create_normalized_audio(app.clone(), options.audio_path.clone().into(), None)
             .await
             .map_err(|e| format!("Failed to normalize audio: {}", e))?
     } else {
-        println!("Skip normalize");
+        tracing::debug!(target: "autosubs", "Skip normalize");
         options.audio_path.clone().into()
     };
+
+    job.step("Audio normalization done", &format!(
+        "elapsed={:.2}s output={}",
+        norm_start.elapsed().as_secs_f64(),
+        raw_norm_path.display()
+    ));
 
     // Rename the main audio to a stable name so voice-sample normalization
     // (which also writes to normalized_audio.wav) cannot overwrite it.
@@ -158,14 +193,14 @@ pub async fn transcribe_audio<R: Runtime>(
         match std::fs::rename(&raw_norm_path, &main_audio_dest) {
             Ok(()) => main_audio_dest,
             Err(e) => {
-                tracing::warn!("Could not rename main audio, using original path: {}", e);
+                tracing::warn!(target: "autosubs", "Could not rename main audio, using original path: {}", e);
                 raw_norm_path
             }
         }
     } else {
         raw_norm_path
     };
-    println!("Normalized audio path: {}", audio_path.display());
+    tracing::info!(target: "autosubs", "Normalized audio path: {}", audio_path.display());
 
     // --- Normalise voice sample files ---
     let mut normalised_voice_samples: Vec<VoiceSamplePath> = Vec::new();
@@ -177,10 +212,9 @@ pub async fn transcribe_audio<R: Runtime>(
                 None,
             ).await {
                 Ok(norm_path) => {
-                    // Rename to a stable per-sample path to avoid collisions
                     let sample_out = norm_path.with_file_name(format!("voice_sample_{}.wav", i));
                     if let Err(e) = std::fs::rename(&norm_path, &sample_out) {
-                        tracing::warn!("Could not rename sample {}: {}", i, e);
+                        tracing::warn!(target: "autosubs", "Could not rename sample {}: {}", i, e);
                         normalised_voice_samples.push(VoiceSamplePath {
                             label: sample.label.clone(),
                             path: norm_path.to_string_lossy().to_string(),
@@ -193,67 +227,77 @@ pub async fn transcribe_audio<R: Runtime>(
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to normalise voice sample '{}': {}", sample.label, e);
+                    tracing::warn!(target: "autosubs", "Failed to normalise voice sample '{}': {}", sample.label, e);
                 }
             }
         }
     }
 
+    job.step("Voice samples", &format!(
+        "{} sample(s) normalised, {} failed",
+        normalised_voice_samples.len(),
+        options.voice_samples.as_ref().map_or(0, |v| v.len()).saturating_sub(normalised_voice_samples.len())
+    ));
+
     // Clone app handle for segment callback and wrap in Arc for thread-safe sharing
     let segment_emit_app = Arc::new(app.clone());
     let segment_emit_app_clone = Arc::clone(&segment_emit_app);
 
-    // Run transcription using the whisper-diarize-rs crate (it's async)
+    // Run transcription using the transcription-engine crate
+    let engine_start = Instant::now();
     let res = async move {
         // Get the proper cache directory for models
         let cache_dir = get_cache_dir(app.clone())
             .map_err(|e| format!("Failed to get cache directory: {}", e))?;
-        
+
+        tracing::info!(target: "autosubs", "Cache directory: {}", cache_dir.display());
+
         // Create engine config with proper cache directory
         let engine_config = EngineConfig {
-            cache_dir,
-            enable_dtw: options.enable_dtw.or(Some(true)), // Enable DTW for better word timestamps
-            enable_flash_attn: Some(true),                 // Engine handles DTW/flash attention mutual exclusion
-            use_gpu: options.enable_gpu.or(Some(true)),    // Enable GPU acceleration when available
-            gpu_device: None,                 // Use default GPU device
-            vad_model_path: None,             // Use default VAD model
-            diarize_segment_model_path: None, // Download segmentation model if needed
-            diarize_embedding_model_path: None, // Download embedding model if needed
+            cache_dir: cache_dir.clone(),
+            enable_dtw: options.enable_dtw.or(Some(true)),
+            enable_flash_attn: Some(true),
+            use_gpu: options.enable_gpu.or(Some(true)),
+            gpu_device: None,
+            vad_model_path: None,
+            diarize_segment_model_path: None,
+            diarize_embedding_model_path: None,
         };
-        
+        tracing::info!(
+            target: "autosubs",
+            "Engine config: dtw={:?} flash_attn={:?} gpu={:?} cache={}",
+            engine_config.enable_dtw,
+            engine_config.enable_flash_attn,
+            engine_config.use_gpu,
+            cache_dir.display()
+        );
+
         let mut engine = Engine::new(engine_config);
 
         // Map frontend options to crate options
         let mut transcribe_options = TranscribeOptions::default();
         transcribe_options.model = options.model.clone();
         transcribe_options.lang = options.lang.clone().or(Some("auto".into()));
-        transcribe_options.enable_vad = Some(true); // Always enable VAD
+        transcribe_options.enable_vad = Some(true);
         transcribe_options.enable_diarize = options.enable_diarize;
-        // Guard against invalid values from the frontend. In the engine, max_speakers == 0
-        // effectively prevents creating any speakers and can lead to all segments being labeled "?".
         transcribe_options.max_speakers = match options.max_speakers {
             Some(0) => None,
             other => other,
         };
-        // Handle translation - use target_language from frontend
         if options.translate.unwrap_or(false) {
             if let Some(target) = options.target_language {
                 if target == "en" {
-                    // English: use Whisper's built-in translation
                     transcribe_options.whisper_to_english = Some(true);
                     transcribe_options.translate_target = None;
                 } else {
-                    // Non-English: use post-translation via Google Translate
                     transcribe_options.whisper_to_english = Some(false);
                     transcribe_options.translate_target = Some(target);
                 }
             } else {
-                // Default to English for backward compatibility
                 transcribe_options.whisper_to_english = Some(true);
                 transcribe_options.translate_target = None;
             }
         } else {
-            // Translation disabled
             transcribe_options.whisper_to_english = Some(false);
             transcribe_options.translate_target = None;
         }
@@ -266,22 +310,19 @@ pub async fn transcribe_audio<R: Runtime>(
         };
         transcribe_options.voice_similarity_threshold = options.voice_similarity_threshold;
 
-        // Note: GPU is handled internally by the crate based on platform
-        // For now, we pass the enable_gpu option if the crate supports it in the future
-
-        // Set up callbacks using whisper-diarize-rs built-in cancellation
+        // Set up callbacks
         let segment_callback = move |segment: &WDSegment| {
-            println!("New segment: {}", segment.text);
-            
-            // Emit the segment text to frontend for live preview
+            tracing::debug!(target: "autosubs", "New segment: {}", segment.text);
             let _ = segment_emit_app_clone.emit("new-segment", segment.text.clone());
         };
-        
+
         let callbacks = Callbacks {
             progress: Some(&|percent: i32, progress_type: ProgressType, label: &str| {
-                println!("{}: {}% - {:?}", label, percent, progress_type);
-                
-                // Update global progress state
+                tracing::debug!(
+                    target: "autosubs",
+                    "{}: {}% - {:?}",
+                    label, percent, progress_type
+                );
                 LATEST_PROGRESS.store(percent, Ordering::Relaxed);
                 if let Ok(mut progress_type_lock) = LATEST_PROGRESS_TYPE.lock() {
                     *progress_type_lock = Some(progress_type.clone());
@@ -307,28 +348,27 @@ pub async fn transcribe_audio<R: Runtime>(
             }
         }
 
-        // Run transcription
+        tracing::info!(target: "autosubs", "Calling transcription engine: model={}", transcribe_options.model);
+
         let segments = engine
             .transcribe_audio(
                 &audio_path.to_string_lossy(),
                 transcribe_options,
-                options.max_lines, // max_lines
-                options.density, // density
+                options.max_lines,
+                options.density,
                 Some(callbacks),
             )
             .await
             .map_err(|e| {
-                // Check if this was a cancellation error
                 if let Ok(should_cancel) = SHOULD_CANCEL.lock() {
                     if *should_cancel {
-                        "Transcription cancelled".to_string()
-                    } else {
-                        format!("Transcription failed: {}", e)
+                        return "Transcription cancelled".to_string();
                     }
-                } else {
-                    format!("Transcription failed: {}", e)
                 }
+                format!("Transcription failed: {}", e)
             })?;
+
+        tracing::info!(target: "autosubs", "Engine returned {} raw segments", segments.len());
 
         // Check for cancellation after transcription completes
         if let Ok(should_cancel) = SHOULD_CANCEL.lock() {
@@ -337,7 +377,7 @@ pub async fn transcribe_audio<R: Runtime>(
             }
         }
 
-        // Convert whisper-diarize-rs segments to app's Segment format
+        // Convert engine segments to app's Segment format
         let mut app_segments: Vec<Segment> = segments
             .iter()
             .map(|seg| {
@@ -372,13 +412,22 @@ pub async fn transcribe_audio<R: Runtime>(
 
             if total > 0 && unknown == total {
                 tracing::warn!(
-                    "Diarization enabled but all segments have unknown speaker_id ('?'). Check model availability and options.max_speakers."
+                    target: "autosubs",
+                    "Diarization enabled but all {} segments have unknown speaker_id ('?'). Check model availability and options.max_speakers.",
+                    total
+                );
+            } else {
+                tracing::info!(
+                    target: "autosubs",
+                    "Diarization: {}/{} segments have identified speakers",
+                    total - unknown, total
                 );
             }
         }
 
         // Apply offset if provided
         if let Some(offset) = options.offset {
+            tracing::debug!(target: "autosubs", "Applying timestamp offset: {}s", offset);
             for segment in app_segments.iter_mut() {
                 segment.start = round_to_places(segment.start + offset, 3);
                 segment.end = round_to_places(segment.end + offset, 3);
@@ -399,12 +448,14 @@ pub async fn transcribe_audio<R: Runtime>(
         };
 
         Ok::<Transcript, String>(Transcript {
-            processing_time_sec: 0, // Will be set below
+            processing_time_sec: 0, // Set below
             segments,
             speakers,
         })
     }
     .await;
+
+    let engine_elapsed = engine_start.elapsed().as_secs_f64();
 
     // Stop emitter and wait for it to finish
     let _ = stop_tx.send(());
@@ -413,57 +464,61 @@ pub async fn transcribe_audio<R: Runtime>(
     match res {
         Ok(mut transcript) => {
             transcript.processing_time_sec = start_time.elapsed().as_secs();
-            println!(
-                "Transcription successful in {:.2}s",
+
+            // Log result summary
+            use std::collections::BTreeMap;
+            let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+            for seg in transcript.segments.iter() {
+                let key = seg
+                    .speaker_id
+                    .as_deref()
+                    .unwrap_or("<none>")
+                    .trim()
+                    .to_string();
+                *counts.entry(key).or_insert(0) += 1;
+            }
+            tracing::info!(
+                target: "autosubs",
+                "Transcription complete: segments={} speakers={} speaker_counts={:?} elapsed={:.2}s",
+                transcript.segments.len(),
+                transcript.speakers.len(),
+                counts,
                 transcript.processing_time_sec
             );
 
-            // Debug: inspect what we're actually returning to the frontend.
-            // Set AUTOSUBS_DEBUG_TRANSCRIPT=1 to pretty-print the full JSON.
-            {
-                use std::collections::BTreeMap;
-
-                let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-                for seg in transcript.segments.iter() {
-                    let key = seg
-                        .speaker_id
-                        .as_deref()
-                        .unwrap_or("<none>")
-                        .trim()
-                        .to_string();
-                    *counts.entry(key).or_insert(0) += 1;
-                }
-
-                println!(
-                    "Returning transcript to frontend: segments={}, speakers={}, speaker_id_counts={:?}",
-                    transcript.segments.len(),
-                    transcript.speakers.len(),
-                    counts
-                );
-
-                if std::env::var("AUTOSUBS_DEBUG_TRANSCRIPT")
-                    .ok()
-                    .as_deref()
-                    == Some("1")
-                {
-                    match serde_json::to_string_pretty(&transcript) {
-                        Ok(json) => println!("Final transcript JSON:\n{}", json),
-                        Err(e) => eprintln!("Failed to serialize transcript for debug: {}", e),
-                    }
+            if std::env::var("AUTOSUBS_DEBUG_TRANSCRIPT").ok().as_deref() == Some("1") {
+                match serde_json::to_string_pretty(&transcript) {
+                    Ok(json) => tracing::debug!(target: "autosubs", "Final transcript JSON:\n{}", json),
+                    Err(e) => tracing::warn!(target: "autosubs", "Failed to serialize transcript for debug: {}", e),
                 }
             }
+
+            job.step("Engine complete", &format!(
+                "elapsed={:.2}s segments={} speakers={}",
+                engine_elapsed,
+                transcript.segments.len(),
+                transcript.speakers.len()
+            ));
+            job.finish(&format!(
+                "segments={} speakers={} total_time={}s",
+                transcript.segments.len(),
+                transcript.speakers.len(),
+                transcript.processing_time_sec
+            ));
 
             Ok(transcript)
         }
         Err(e) => {
-            eprintln!("Error during transcription: {}", e);
+            tracing::error!(target: "autosubs", "Transcription error after {:.2}s: {}", engine_elapsed, e);
+            job.step("Engine failed", &format!("elapsed={:.2}s error={}", engine_elapsed, e));
+            job.fail(&e);
             Err(e)
         }
     }
 }
 
 
-/// Always normalize audio to ensure it's mono 16kHz WAV for whisper-diarize-rs
+/// Always normalize audio to ensure it's mono 16kHz WAV for the transcription engine
 fn should_normalize(_source: PathBuf) -> bool {
     true
 }
@@ -475,7 +530,7 @@ pub async fn create_normalized_audio<R: Runtime>(
     source: PathBuf,
     additional_ffmpeg_args: Option<Vec<String>>,
 ) -> Result<PathBuf> {
-    tracing::debug!("normalize {:?}", source.display());
+    tracing::debug!(target: "autosubs", "normalize {:?}", source.display());
 
     let path_resolver = app.path();
 
@@ -490,7 +545,7 @@ pub async fn create_normalized_audio<R: Runtime>(
         cache_dir.join("normalized_audio.wav")
     };
 
-    tracing::info!("Normalizing audio to path: {}", out_path.display());
+    tracing::info!(target: "autosubs", "Normalizing audio: {} -> {}", source.display(), out_path.display());
 
     audio::normalize(app, source, out_path.clone(), additional_ffmpeg_args)
         .await
@@ -504,11 +559,9 @@ pub async fn create_normalized_audio<R: Runtime>(
 fn aggregate_speakers_from_segments(segments: &[Segment]) -> (Vec<Speaker>, Vec<Segment>) {
     use std::collections::HashMap;
 
-    // Build speaker map: raw_speaker_id -> (index, start_time, end_time)
     let mut speaker_info: HashMap<String, (usize, f64, f64)> = HashMap::new();
     let mut next_index: usize = 0;
 
-    // First pass: collect unique speakers and assign indices
     for segment in segments.iter() {
         if let Some(ref speaker_id) = segment.speaker_id {
             let trimmed = speaker_id.trim();
@@ -529,11 +582,8 @@ fn aggregate_speakers_from_segments(segments: &[Segment]) -> (Vec<Speaker>, Vec<
         }
     }
 
-    // Do not rewrite segment speaker IDs. Preserve the engine's speaker_id values so the UI
-    // sees the same labels as the transcription engine output.
     let updated_segments = segments.to_vec();
 
-    // Convert speaker info to speakers array, sorted by index
     let mut speakers = Vec::new();
     let mut speaker_list: Vec<(String, (usize, f64, f64))> = speaker_info.into_iter().collect();
     speaker_list.sort_by_key(|(_, (index, _, _))| *index);
@@ -567,6 +617,12 @@ pub async fn reformat_subtitles(
     segments: Vec<Segment>,
     options: FrontendFormattingOptions,
 ) -> Result<Vec<Segment>, String> {
+    tracing::info!(
+        target: "autosubs",
+        "Reformat requested: lang={:?} max_lines={:?} density={:?}",
+        options.language, options.max_lines, options.text_density
+    );
+
     // Convert app segments to engine segments (WDSegment)
     let engine_segments: Vec<WDSegment> = segments
         .iter()
@@ -593,7 +649,6 @@ pub async fn reformat_subtitles(
         })
         .collect();
 
-    // Build config from language profile, then apply density and max_lines
     let lang = options.language.as_deref().unwrap_or("en");
     let mut config = PostProcessConfig::for_language(lang);
 
@@ -610,10 +665,8 @@ pub async fn reformat_subtitles(
         config.max_lines = ml;
     }
 
-    // Run the formatting engine
     let formatted = process_segments(&engine_segments, &config);
 
-    // Convert back to app segments
     let result: Vec<Segment> = formatted
         .iter()
         .map(|seg| {
@@ -638,6 +691,8 @@ pub async fn reformat_subtitles(
             }
         })
         .collect();
+
+    tracing::info!(target: "autosubs", "Reformat complete: {} -> {} segments", segments.len(), result.len());
 
     Ok(result)
 }

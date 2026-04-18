@@ -171,7 +171,7 @@ fn main() {
                                 {
                                   Ok(bytes) => bytes,
                                   Err(e) => {
-                                    eprintln!("Update download failed: {e}");
+                                    tracing::error!(target: "autosubs", "Update download failed: {}", e);
                                     let _ = handle_for_dl.emit("update-error", json!({ "error": e.to_string() }));
                                     return;
                                   }
@@ -185,7 +185,7 @@ fn main() {
 
                                 // Install the update (this calls std::process::exit internally)
                                 if let Err(e) = update2.install(bytes) {
-                                  eprintln!("Update install failed: {e}");
+                                  tracing::error!(target: "autosubs", "Update install failed: {}", e);
                                   let _ = handle_for_dl.emit("update-error", json!({ "error": e.to_string() }));
                                 }
                               }

@@ -25,8 +25,7 @@ pub async fn normalize<R: Runtime>(
             fs::create_dir_all(parent)?;
         }
 
-        println!("Converting audio to mono: {:?} -> {:?}", input, output);
-        tracing::info!("Audio normalization: converting to mono 16kHz PCM16 WAV");
+        tracing::info!(target: "autosubs", "Audio normalization: {:?} -> {:?} (mono 16kHz PCM16 WAV)", input, output);
 
         let sidecar_command = app.shell().sidecar("ffmpeg");
         let input_lossy = input.to_string_lossy().into_owned();
@@ -113,7 +112,7 @@ pub async fn normalize<R: Runtime>(
             tracing::warn!("Output WAV file is suspiciously small (header-only): {:?}", output);
         }
 
-        println!("Audio conversion successful: {:?}", output);
+        tracing::info!(target: "autosubs", "Audio conversion successful: {:?} ({} bytes)", output, out_meta.len());
         Ok(())
     }
 
