@@ -107,8 +107,19 @@ jobs:
           NSIS_END
 
       - name: Compile NSIS wrapper
-        shell: cmd
-        run: '"C:\Program Files (x86)\NSIS\makensis.exe" wrapper.nsi'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Tauri downloads its own NSIS during the build — find and reuse it
+          makensis=$(find "$LOCALAPPDATA/tauri" -name "makensis.exe" 2>/dev/null | head -1)
+          if [ -z "$makensis" ]; then
+            echo "ERROR: makensis.exe not found under $LOCALAPPDATA/tauri"
+            echo "Contents of $LOCALAPPDATA/tauri:"
+            ls -R "$LOCALAPPDATA/tauri" || true
+            exit 1
+          fi
+          echo "Using makensis: $makensis"
+          "$makensis" wrapper.nsi
 
       - name: Upload installer to GitHub Release
         uses: softprops/action-gh-release@v2
