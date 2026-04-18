@@ -15,9 +15,6 @@ permissions:
 
 env:
   TAG: ${{ github.event.release.tag_name || inputs.tag }}
-  APP_NAME: "Marks Amazing Subtitles"
-  # Folder name used by the Lua script to locate install_path.txt
-  LUA_FOLDER: "MarksAmazingSubs"
 
 jobs:
   build-windows:
@@ -51,162 +48,67 @@ jobs:
           cd AutoSubs-App/src-tauri
           mkdir -p binaries
           cd binaries
-
           gh release download \
             --repo tmoroney/ffmpeg-binaries \
             --pattern "ffmpeg-x86_64-pc-windows-msvc.zip" \
             --clobber
-
           unzip -jo "ffmpeg-x86_64-pc-windows-msvc.zip"
           rm -f "ffmpeg-x86_64-pc-windows-msvc.zip"
 
       - name: Install npm dependencies
-        run: |
-          cd AutoSubs-App
-          npm install
+        shell: bash
+        run: cd AutoSubs-App && npm install
 
       - name: Build Tauri (Windows NSIS installer)
         shell: bash
         run: |
           cd AutoSubs-App
-          # Build with no GPU features for now (avoids Vulkan SDK dependency).
-          # Transcription runs on CPU (AVX2). DirectML/Vulkan can be re-enabled
-          # once the build pipeline is stable.
           npm run tauri build -- -- --no-default-features
 
-      - name: Locate and stage onnxruntime.dll (if present)
-        # ort may be statically linked (no DLL produced) or dynamically linked.
-        # Search all known locations and stage the DLL only if found.
-        # The result is written to ort-link-mode.txt so the NSIS step can
-        # decide whether to bundle it.
-        shell: powershell
+      - name: Stage files for NSIS wrapper
+        shell: bash
         run: |
-          $releaseDir = "AutoSubs-App\src-tauri\target\release"
-          $dll = $null
+          set -euo pipefail
+          nsis_dir="AutoSubs-App/src-tauri/target/release/bundle/nsis"
+          exe=$(ls "$nsis_dir"/*.exe | head -1)
+          if [ -z "$exe" ]; then
+            echo "ERROR: No NSIS installer found in $nsis_dir"
+            exit 1
+          fi
+          echo "Staging: $exe"
+          cp "$exe" original-setup.exe
+          cp AutoSubs-App/src-tauri/resources/MarksAmazingSubs.lua MarksAmazingSubs.lua
 
-          # 1. copy-dylibs: placed next to the binary
-          $dll = Get-Item "$releaseDir\onnxruntime.dll" -ErrorAction SilentlyContinue
-
-          # 2. No copy-dylibs: DLL stays in the Cargo build OUT_DIR
-          if (-not $dll) {
-            Write-Host "Not in release dir, searching Cargo build directory..."
-            $dll = Get-ChildItem "$releaseDir\build" -Recurse -Filter "onnxruntime.dll" `
-              -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-
-          # 3. ort global download cache
-          if (-not $dll) {
-            Write-Host "Not in build dir, searching ort download cache..."
-            $dll = Get-ChildItem "$env:LOCALAPPDATA\ort.pyke.io" -Recurse -Filter "onnxruntime.dll" `
-              -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-
-          # 4. Full target-tree scan (last resort)
-          if (-not $dll) {
-            Write-Host "Scanning entire target tree..."
-            $dll = Get-ChildItem "AutoSubs-App\src-tauri\target" -Recurse -Filter "onnxruntime.dll" `
-              -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-
-          if ($dll) {
-            Write-Host "Found onnxruntime.dll at: $($dll.FullName)"
-            Write-Host "Size: $([math]::Round($dll.Length / 1MB, 1)) MB"
-            Copy-Item $dll.FullName "onnxruntime.dll"
-            "dynamic" | Out-File -FilePath "ort-link-mode.txt" -Encoding utf8 -NoNewline
-            Write-Host "ort link mode: dynamic (DLL will be bundled)"
-          } else {
-            Write-Host "onnxruntime.dll not found - ort appears to be statically linked."
-            Write-Host "The binary already contains ONNX Runtime; no DLL bundling needed."
-            "static" | Out-File -FilePath "ort-link-mode.txt" -Encoding utf8 -NoNewline
-            Write-Host "ort link mode: static (no DLL to bundle)"
-          }
-
-      - name: Inject install_path.txt into NSIS installer
-        # Builds a wrapper NSIS installer that:
-        #   1. Bundles + runs the original Tauri installer silently
-        #   2. Copies onnxruntime.dll into the app directory (only if dynamic-linked)
-        #   3. Writes install_path.txt pointing at the per-user install location
-        #   4. Copies MarksAmazingSubs.lua into DaVinci Resolve's scripts folder
-        #
-        # IMPORTANT: All files are bundled at NSIS compile-time via File commands
-        # so paths are valid on the end-user's machine (not the CI runner paths).
-        #
-        # Install path: Tauri 2 NSIS default (no installMode set) is currentUser,
-        # which installs to %LOCALAPPDATA%\Programs\<productName>.
-        shell: powershell
+      - name: Write NSIS wrapper script
+        shell: bash
         run: |
-          $nsisDir = "AutoSubs-App\src-tauri\target\release\bundle\nsis"
-          $exePath = Get-ChildItem "$nsisDir\*.exe" | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $exePath) { Write-Error "No NSIS exe found"; exit 1 }
-
-          # Stage files that NSIS needs to bundle at compile time
-          Copy-Item $exePath "original-setup.exe"
-          Copy-Item "AutoSubs-App\src-tauri\resources\MarksAmazingSubs.lua" "MarksAmazingSubs.lua"
-
-          # Only include onnxruntime.dll section if the DLL was actually found.
-          # Build as a plain string — no nested here-string (closing "@ must be
-          # at column 0 in PS, but YAML block scalars require indentation).
-          $ortLinkMode = Get-Content "ort-link-mode.txt" -ErrorAction SilentlyContinue
-          $dllLines = @()
-          if ($ortLinkMode -eq "dynamic") {
-            Write-Host "Including onnxruntime.dll in installer (dynamic ort)"
-            $dllLines += "            ; ort is dynamically linked - install the ONNX Runtime DLL"
-            $dllLines += "            SetOutPath `"`$LOCALAPPDATA\Programs\Marks Amazing Subtitles`""
-            $dllLines += "            File `"onnxruntime.dll`""
-          } else {
-            Write-Host "Skipping onnxruntime.dll (ort is statically linked)"
-          }
-          $dllSection = $dllLines -join "`n"
-
-          $wrapperNsi = @"
+          cat > wrapper.nsi << 'NSIS_END'
           OutFile "MarksAmazingSubs-windows-x86_64-setup.exe"
           RequestExecutionLevel user
 
           Section
-            ; Bundle + extract the Tauri installer so the path is valid on the user's machine
+            ; Run the Tauri installer silently from a temp path
             InitPluginsDir
-            SetOutPath "`$PLUGINSDIR"
+            SetOutPath "$PLUGINSDIR"
             File "original-setup.exe"
-            ExecWait '"`$PLUGINSDIR\original-setup.exe" /S'
-          $dllSection
+            ExecWait '"$PLUGINSDIR\original-setup.exe" /S'
 
             ; Write install_path.txt so the Lua bridge can find the app.
-            ; Tauri 2 currentUser NSIS default: %LOCALAPPDATA%\Programs\<productName>
-            SetOutPath "`$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\MarksAmazingSubs"
-            FileOpen `$0 install_path.txt w
-            FileWrite `$0 "`$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
-            FileClose `$0
+            ; Tauri 2 per-user default: %LOCALAPPDATA%\Programs\<productName>
+            SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\MarksAmazingSubs"
+            FileOpen $0 install_path.txt w
+            FileWrite $0 "$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
+            FileClose $0
 
-            ; Copy the Lua entry-point script to Resolve's scripts folder
-            SetOutPath "`$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
+            ; Install the Lua entry-point script into DaVinci Resolve's scripts folder
+            SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
             File "MarksAmazingSubs.lua"
           SectionEnd
-          "@
-          $wrapperNsi | Out-File -FilePath wrapper.nsi -Encoding utf8
-          Write-Host "Wrapper NSIS script created"
+          NSIS_END
 
-      - name: Compile wrapper installer
-        shell: powershell
-        run: |
-          $nsisBin = "C:\Program Files (x86)\NSIS\makensis.exe"
-          if (-not (Test-Path $nsisBin)) {
-            Write-Error "NSIS not found at $nsisBin - cannot build wrapper installer"
-            exit 1
-          }
-          Write-Host "NSIS found: $nsisBin"
-
-          Write-Host "=== wrapper.nsi ==="
-          Get-Content wrapper.nsi
-          Write-Host "=== end wrapper.nsi ==="
-
-          & $nsisBin wrapper.nsi
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "makensis failed with exit code $LASTEXITCODE"
-            exit 1
-          }
-
-          Write-Host "Final installer:"
-          Get-Item "MarksAmazingSubs-windows-x86_64-setup.exe"
+      - name: Compile NSIS wrapper
+        shell: cmd
+        run: '"C:\Program Files (x86)\NSIS\makensis.exe" wrapper.nsi'
 
       - name: Upload installer to GitHub Release
         uses: softprops/action-gh-release@v2
