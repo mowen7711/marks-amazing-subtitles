@@ -63,9 +63,9 @@ jobs:
         shell: bash
         run: |
           cd AutoSubs-App
-          npm run tauri build -- -- --no-default-features --features windows-cpu
+          npm run tauri build -- -- --no-default-features
 
-      - name: Upload installer to GitHub Release
+      - name: Stage files for NSIS wrapper
         shell: bash
         run: |
           set -euo pipefail
@@ -75,7 +75,32 @@ jobs:
             echo "ERROR: No NSIS installer found in $nsis_dir"
             exit 1
           fi
-          echo "Uploading: $exe"
-          gh release upload "$TAG" "$exe" --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "Staging: $exe"
+          cp "$exe" original-setup.exe
+          cp AutoSubs-App/src-tauri/resources/MarksAmazingSubs.lua MarksAmazingSubs.lua
+          echo "Downloading VC++ 2015-2022 redistributable..."
+          curl -sSL "https://aka.ms/vs/17/release/vc_redist.x64.exe" -o vc_redist.x64.exe
+
+      - name: Copy NSIS wrapper script
+        shell: bash
+        run: cp .github/windows-wrapper.nsi wrapper.nsi
+
+      - name: Compile NSIS wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          makensis=$(find "$LOCALAPPDATA/tauri" -name "makensis.exe" 2>/dev/null | head -1)
+          if [ -z "$makensis" ]; then
+            echo "ERROR: makensis.exe not found under $LOCALAPPDATA/tauri"
+            ls -R "$LOCALAPPDATA/tauri" || true
+            exit 1
+          fi
+          echo "Using makensis: $makensis"
+          "$makensis" wrapper.nsi
+
+      - name: Upload installer to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MarksAmazingSubs-windows-x86_64-setup.exe
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.TAG }}
