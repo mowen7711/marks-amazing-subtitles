@@ -49,6 +49,7 @@ vulkan = ["whisper-rs/vulkan"]
 mac-aarch = ["coreml", "metal"]
 mac-x86_64 = ["metal"]
 windows = ["vulkan", "directml"]  # Whisper GPU acceleration via Vulkan (AMD/Intel/NVIDIA) + Pyannote acceleration via DirectML (Windows only)
+windows-cpu = ["directml"]        # Windows without Vulkan: Pyannote uses DirectML, Whisper runs on CPU
 linux = ["vulkan"]
 
 # Note: Had issues with OpenBLAS + Vulkan, so removed it

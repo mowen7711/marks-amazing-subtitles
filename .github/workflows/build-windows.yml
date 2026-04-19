@@ -39,13 +39,6 @@ jobs:
         with:
           workspaces: AutoSubs-App/src-tauri
 
-      - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: 1.3.296.0
-          install_runtime: true
-          cache: true
-
       - name: Download FFmpeg binary (Windows x86_64)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,7 +63,7 @@ jobs:
         shell: bash
         run: |
           cd AutoSubs-App
-          npm run tauri build -- -- --no-default-features --features windows
+          npm run tauri build -- -- --no-default-features --features windows-cpu
 
       - name: Upload installer to GitHub Release
         shell: bash
