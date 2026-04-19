@@ -44,6 +44,16 @@ fn trigger_install_update(state: tauri::State<InstallSignal>) {
 }
 
 fn main() {
+    // Startup diagnostic: write a file before any Tauri init so we can
+    // confirm whether the exe is running at all. Remove once working.
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::fs::write(
+            "C:\\Users\\Public\\autosubs_started.txt",
+            "main() reached - exe is running",
+        );
+    }
+
     // Note: whisper-diarize-rs handles whisper_rs logging internally
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
