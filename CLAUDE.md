@@ -189,27 +189,18 @@ Push to fork with: `git push myfork main`
 
 ---
 
-## Pending Features
+## Features — Implemented
 
-### 1. Inaudible segment filtering
-**Status:** Not yet implemented.
-When the transcription engine cannot detect audio clearly it emits segments with text like
-`[inaudible]`, `(inaudible)`, or similar. **These segments must be dropped** — no subtitle
-should be generated. Do not display "inaudible" to the user.
+### Inaudible segment filtering
+Handled in `crates/transcription-engine/src/formatting.rs` by `is_noise_token()` (lines 32–47).
+Drops `[inaudible]`, `(inaudible)`, `blank_audio`, `silence`, `music`, `laughter`,
+`unintelligible`, `indistinct`, and similar patterns. No subtitle is generated for these segments.
+Filtering is automatic — there is no user-facing toggle.
 
-**Where to implement:** `transcription_api.rs`, after the engine returns segments and before
-building the `Transcript`. Filter out any segment whose `text` (trimmed, lowercased) matches
-patterns like `[inaudible]`, `(inaudible)`, `inaudible`, `[unintelligible]`, etc.
-
-### 2. Voice sampling (pre-transcription speaker filtering)
-**Status:** Backend fully implemented. Frontend integration status unknown.
-Users record or provide short audio clips of specific speakers beforehand. During transcription,
-only segments whose speaker embedding matches one of the provided samples (above a configurable
-similarity threshold) are included in the output.
-
-**Backend API:** `FrontendTranscribeOptions.voice_samples: Option<Vec<FrontendVoiceSample>>`
-Each sample has `{ label: String, path: String }`. The backend normalises each sample to
-mono 16kHz WAV and passes them to the engine as `voice_sample_paths`.
-`voice_similarity_threshold: Option<f32>` controls how strict the matching is.
-
-Check the frontend (`src/`) to see if the UI for uploading/managing voice samples exists yet.
+### Voice sampling (pre-transcription speaker filtering)
+Fully implemented end-to-end.
+- **UI:** `src/components/settings/diarize-selector.tsx` — "Voice Filter" toggle, file picker,
+  editable sample labels, remove button, "Match Sensitivity" slider (0.5–0.95)
+- **State:** `SettingsContext` — `voiceFilterEnabled`, `voiceSamples[]`, `voiceSimilarityThreshold`
+- **Wired to backend:** `transcription-panel.tsx` passes samples only when diarization + voice filter are both enabled
+- **Backend:** `transcription_api.rs` normalises each sample to mono 16kHz WAV and passes as `voice_sample_paths` to the engine
