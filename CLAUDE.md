@@ -1,19 +1,24 @@
-# AutoSubs - Claude Context
+# Marks Amazing Subtitles — Claude Context
 
-AutoSubs is a cross-platform desktop application that generates subtitles locally using AI transcription models — no cloud, no subscription. Built with Tauri 2 (Rust backend + React/TypeScript frontend).
+Personal fork of [tmoroney/auto-subs](https://github.com/tmoroney/auto-subs).
+Fork repo: `mowen7711/marks-amazing-subtitles` — push with `git push myfork main`.
+
+Tauri 2 desktop app (Rust backend + React/TypeScript frontend) that transcribes audio/video
+and generates subtitles directly inside DaVinci Resolve. No cloud, no subscription — fully local.
 
 ---
 
 ## What It Does
 
-- Transcribes audio/video files using local AI models (Whisper, Parakeet, Moonshine)
-- Speaker diarization — automatically labels and colour-codes speakers
+- Transcribes audio/video using local AI models (Whisper, Parakeet, Moonshine)
+- Speaker diarization — labels and colour-codes speakers automatically
+- Voice sampling — filter transcription to only recognised voices
 - Translates subtitles via Google Translate
 - Exports to SRT, plain text, or clipboard
-- Deep integration with **DaVinci Resolve** — injects subtitles directly into timelines via Lua scripts over a socket connection
+- Deep integration with **DaVinci Resolve** — injects subtitles directly into timelines via Lua scripts over a local socket
 - Per-speaker styling (colour, outline, border) within Resolve
 - Voice Activity Detection (VAD) for cleaner segmentation
-- GPU acceleration: Metal/CoreML (macOS), Vulkan/DirectML (Windows), Vulkan (Linux)
+- GPU acceleration: Metal/CoreML (macOS), CPU-only for Windows currently (Vulkan/DirectML builds fragile in CI)
 
 ---
 
@@ -30,67 +35,70 @@ AutoSubs is a cross-platform desktop application that generates subtitles locall
 - **Tauri 2** — desktop framework, IPC, plugins (fs, http, dialogs, clipboard, store, updater, shell)
 - **Tokio** — async runtime
 - **whisper-rs** — Whisper transcription
-- **transcribe-rs** — Parakeet and Moonshine models
+- **transcribe-rs** — Parakeet and Moonshine models (macOS/Linux only — CRT conflict on Windows)
 - **pyannote-rs** — speaker diarization
+- **ort** (ONNX Runtime) — ML inference runtime
 - **FFmpeg** — bundled sidecar, normalises audio to 16kHz mono PCM WAV before transcription
 - **hf-hub** — HuggingFace model downloads
-- **tracing** — logging
+- **tracing** / **tracing-appender** / **tracing-subscriber** — structured logging
 
 ---
 
 ## Repository Structure
 
 ```
-auto-subs/
-├── AutoSubs-App/                  # Main Tauri application
-│   ├── src/                       # React frontend
+marks-amazing-subtitles/
+├── .github/
+│   ├── windows-wrapper.nsi            # NSIS wrapper: VC++ redist + app + Lua bridge
+│   └── workflows/
+│       └── build-windows.yml          # GitHub Actions Windows CI build
+├── AutoSubs-App/
+│   ├── src/                           # React frontend
 │   │   ├── components/
-│   │   │   ├── common/            # Shared UI components
-│   │   │   ├── dialogs/           # Modal dialogs
-│   │   │   ├── settings/          # Settings panels (model picker, language, diarize, etc.)
-│   │   │   ├── subtitles/         # Subtitle viewer, editor, speaker settings
-│   │   │   └── transcription/     # Transcription panel (main trigger UI)
-│   │   ├── contexts/              # Global state
+│   │   │   ├── common/                # Shared UI components
+│   │   │   ├── dialogs/               # Modal dialogs
+│   │   │   ├── settings/              # Settings panels
+│   │   │   │   └── diarize-selector.tsx  # Voice filter UI (samples, threshold)
+│   │   │   ├── subtitles/             # Subtitle viewer, editor, speaker settings
+│   │   │   └── transcription/
+│   │   │       └── transcription-panel.tsx  # Main transcription trigger + IPC call
+│   │   ├── contexts/
 │   │   │   ├── GlobalProvider.tsx
-│   │   │   ├── TranscriptContext.tsx   # Subtitle segments & speaker state
-│   │   │   ├── ProgressContext.tsx     # Progress tracking (Download/Transcribe/Diarize/Translate)
-│   │   │   ├── ModelsContext.tsx       # Available & downloaded models
-│   │   │   ├── SettingsContext.tsx     # Persisted app settings
-│   │   │   └── ResolveContext.tsx      # DaVinci Resolve integration state
-│   │   ├── hooks/                 # Custom React hooks
-│   │   ├── api/                   # IPC communication layer
-│   │   ├── types/                 # TypeScript types
-│   │   └── i18n/                  # Internationalisation strings
-│   └── src-tauri/                 # Rust backend
+│   │   │   ├── TranscriptContext.tsx  # Subtitle segments & speaker state
+│   │   │   ├── ProgressContext.tsx    # Real-time transcription progress
+│   │   │   ├── ModelsContext.tsx      # Available & downloaded models
+│   │   │   ├── SettingsContext.tsx    # Persisted settings (incl. voice samples)
+│   │   │   └── ResolveContext.tsx     # DaVinci Resolve connection state
+│   │   ├── hooks/
+│   │   ├── api/                       # IPC communication layer
+│   │   ├── types/interfaces.ts        # TypeScript types (VoiceSample, TranscriptionOptions, etc.)
+│   │   └── i18n/                      # Internationalisation strings
+│   └── src-tauri/
 │       ├── src/
-│       │   ├── main.rs                  # App init, plugin setup, command registration
-│       │   ├── transcription_api.rs     # transcribe_audio(), cancel_transcription() commands
-│       │   ├── audio_preprocess.rs      # FFmpeg audio normalisation
-│       │   ├── models.rs               # Model cache management
-│       │   └── transcript_types.rs     # IPC-serialisable types (Segment, Speaker, Transcript)
+│       │   ├── main.rs                # App init, plugins, updater, exit handling, console window
+│       │   ├── transcription_api.rs   # transcribe_audio(), cancel_transcription(), reformat_subtitles()
+│       │   ├── audio_preprocess.rs    # FFmpeg wrapper — mono 16kHz PCM WAV conversion
+│       │   ├── logging.rs             # tracing setup, in-memory ring buffer, JobLog
+│       │   ├── models.rs              # Model download & cache management
+│       │   └── transcript_types.rs    # IPC-serialisable types (Segment, Speaker, Transcript)
 │       ├── crates/
-│       │   └── transcription-engine/   # Core transcription crate
+│       │   └── transcription-engine/
 │       │       └── src/
-│       │           ├── engine.rs        # Engine struct, transcribe_audio() pipeline orchestration
-│       │           ├── engines/         # whisper.rs, parakeet.rs, moonshine.rs
-│       │           ├── model_manager.rs # HuggingFace download & cache
-│       │           ├── formatting.rs    # Line-breaking, CPS/CPL limits, language presets
-│       │           ├── translate.rs     # Google Translate integration
-│       │           ├── vad.rs           # Voice Activity Detection
-│       │           └── speaker.rs       # Speaker ID assignment
-│       └── resources/                  # DaVinci Resolve integration
-│           ├── AutoSubs.lua             # Resolve entry point script
-│           ├── Testing-AutoSubs.lua     # Dev version
-│           └── modules/
-│               ├── autosubs_core.lua    # Core Lua module — UI, timeline, IPC (~57KB)
-│               ├── ljsocket.lua         # Socket communication
-│               └── dkjson.lua           # JSON parsing
-├── flatpak/                       # Flatpak packaging
-├── Mac-Package/                   # macOS packaging config
+│       │           ├── engine.rs          # Engine struct, transcribe_audio() pipeline
+│       │           ├── engines/           # whisper.rs, parakeet.rs, moonshine.rs
+│       │           ├── model_manager.rs   # HuggingFace download & cache
+│       │           ├── formatting.rs      # Line-breaking, noise filtering, language presets
+│       │           ├── translate.rs       # Google Translate integration
+│       │           ├── vad.rs             # Voice Activity Detection
+│       │           └── speaker.rs         # Speaker ID assignment
+│       ├── resources/
+│       │   └── MarksAmazingSubs.lua   # DaVinci Resolve entry point script
+│       ├── tauri.conf.json            # Main Tauri config
+│       └── tauri.windows.conf.json    # Windows overrides (titleBarStyle: Visible)
 ├── Docs/
-│   ├── ResolveDocs.txt            # DaVinci Resolve API reference
-│   └── FusionDocs.txt             # Fusion scripting reference
-└── README.md
+│   ├── ResolveDocs.txt                # DaVinci Resolve API reference
+│   └── FusionDocs.txt                 # Fusion scripting reference
+└── CLAUDE.md
 ```
 
 ---
@@ -98,109 +106,143 @@ auto-subs/
 ## Key Concepts
 
 ### Transcription Pipeline
-1. User selects file → frontend emits `transcribe_audio()` IPC command
-2. Rust preprocesses audio via FFmpeg (→ 16kHz mono WAV)
-3. Transcription engine runs chosen model locally
-4. Optional diarization via Pyannote
-5. Optional translation via Google Translate
-6. Formatter applies language presets + line-breaking + CPS/CPL constraints
-7. Results stream back to frontend as `Segment` objects via IPC events
-8. User edits subtitles (rename speakers, adjust timings, edit text)
-9. Export as SRT/text, or inject into DaVinci Resolve timeline
+1. User selects file → frontend calls `transcribe_audio()` IPC command
+2. Rust normalises audio via FFmpeg (→ 16kHz mono WAV)
+3. Voice samples (if provided) are also normalised
+4. Transcription engine runs chosen model locally
+5. Optional diarization via Pyannote
+6. Optional translation via Google Translate
+7. Formatter applies language presets + line-breaking + CPS/CPL constraints + noise filtering
+8. Results returned to frontend as `Transcript` with `Segment[]` and `Speaker[]`
+9. User edits subtitles (rename speakers, adjust timings, edit text)
+10. Export as SRT/text, or inject into DaVinci Resolve timeline
 
 ### State Management
 All global state lives in React contexts under `src/contexts/`:
 - `TranscriptContext` — subtitle segments and speaker data
 - `ProgressContext` — real-time transcription progress
 - `ModelsContext` — available/cached models
-- `SettingsContext` — persisted user settings
+- `SettingsContext` — persisted user settings (includes voice samples)
 - `ResolveContext` — DaVinci Resolve connection and timeline info
 
 ### DaVinci Resolve Integration
-Communication happens over a local socket. `autosubs_core.lua` runs inside Resolve's Fusion scripting environment and connects to the running AutoSubs app. The Lua script handles timeline extraction, audio export, and subtitle injection.
+Communication happens over a local socket (port 56003). `MarksAmazingSubs.lua` runs inside
+Resolve's Fusion scripting environment, reads `install_path.txt` to locate the app, and
+handles timeline extraction, audio export, and subtitle injection.
+
+Lua bridge files installed to:
+`%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\`
+
+`install_path.txt` written to:
+`%APPDATA%\...\MarksAmazingSubs\install_path.txt` → contains path to `autosubs.exe`
 
 ### Model Storage
-- macOS: `~/Library/Caches/com.autosubs/models`
-- Models downloaded automatically from HuggingFace on first use
-- Multiple sizes: tiny, base, small, medium, large, xlarge
+- macOS: `~/Library/Caches/com.marks-amazing-subtitles/models`
+- Windows: `%LOCALAPPDATA%\marks-amazing-subtitles\models`
+- Downloaded automatically from HuggingFace on first use
+- Sizes: tiny, base, small, medium, large, xlarge
 
 ---
 
 ## Building & Running
 
-### Development
+### Development (macOS)
 ```bash
 cd AutoSubs-App
 npm install
 npm run tauri dev
 ```
 
-### Platform Builds
+### Production (macOS)
 ```bash
-npm run build:mac:arm64    # macOS Apple Silicon (CoreML + Metal)
-npm run build:mac:x86_64   # macOS Intel (Metal)
-npm run build:win          # Windows (Vulkan + DirectML)
-npm run build:linux        # Linux (Vulkan)
+cd AutoSubs-App
+npm run tauri build    # uses default mac-aarch feature (CoreML + Metal)
 ```
 
-### Prerequisites
-- Node.js 18+
-- Rust stable toolchain
-- macOS 13.3+ for macOS builds
+### Windows (CI only — GitHub Actions)
+Triggered via release or `workflow_dispatch` on `build-windows.yml`.
+```bash
+npm run tauri build -- -- --no-default-features
+```
+The NSIS wrapper (`.github/windows-wrapper.nsi`) wraps the output and adds:
+- VC++ 2015–2022 redistributable
+- `install_path.txt` for the Lua bridge
+- `MarksAmazingSubs.lua` into Resolve's scripts folder
+
+---
+
+## Cargo Feature Flags
+
+| Flag | Effect | CI status |
+|------|--------|-----------|
+| `mac-aarch` (default) | CoreML + Metal — Apple Silicon | ✅ works |
+| `mac-x86_64` | Metal only — Intel Mac | ✅ works |
+| `windows` | Vulkan + DirectML | ❌ Vulkan cmake build fails in CI |
+| `windows-cpu` | DirectML only | ❌ requires `onnxruntime.dll` at runtime (silent exit if missing) |
+| `linux` | Vulkan | untested |
+| _(none)_ `--no-default-features` | CPU-only, static ort | ✅ used for Windows CI |
+
+**Windows CI rule:** always use `--no-default-features` — static ort, no DLL dependencies.
+
+---
+
+## Windows — Critical Notes
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| App silently did not open | `plugins.updater` null in config | Added `"plugins": { "updater": { "pubkey": "", "endpoints": [] } }` to `tauri.conf.json` |
+| `msvcp140_1.dll not found` | Missing VC++ runtime | Bundle `vc_redist.x64.exe` in NSIS wrapper |
+| App silently exits with `directml` feature | `ort/directml` loads `onnxruntime.dll` dynamically, not found → `process::exit` | Use `--no-default-features` |
+| `--features windows` build fails | whisper.cpp Vulkan cmake build broken in CI | Avoid until fixed |
+| `makensis.exe` not found | Not pre-installed on runners | Find under `%LOCALAPPDATA%\tauri\` (Tauri downloads its own copy) |
+| `titleBarStyle: Overlay` risk | May cause silent window failure on some Windows versions | Overridden to `Visible` in `tauri.windows.conf.json` |
+| `plugins.updater` null on Windows | macOS tolerates missing config; Windows panics | Must have `plugins.updater` entry in `tauri.conf.json` |
+
+---
+
+## Logging
+
+- All backend output uses `tracing` — no `println!`/`eprintln!`
+- Log files: Tauri app log dir, rolling daily (`logs/autosubs.log.*`)
+- In-memory ring buffer: 20,000 lines, accessible via `get_backend_logs` Tauri command
+- Per-job logs: `logs/jobs/` — each transcription writes a timestamped file via `JobLog`
+- Console window open on Windows (no `windows_subsystem = "windows"`) — live output visible
+
+### JobLog usage
+```rust
+let mut job = crate::logging::new_job_log(&app, "Transcription [small]");
+job.step("Audio normalization", "input=file.mp4");
+job.step("Engine complete", "elapsed=12.3s segments=42");
+job.finish("segments=42 speakers=2 total_time=15s");
+// or job.fail("error message");
+// Drop without finish/fail → writes job_incomplete_*.log
+```
+
+---
+
+## Features
+
+### Voice sampling
+Users provide short audio clips of specific speakers. Only segments matching a sample voice
+(above a similarity threshold) are included in the transcript.
+
+- **UI:** `diarize-selector.tsx` — "Voice Filter" toggle, file picker, editable labels, remove button, "Match Sensitivity" slider (0.5–0.95). Only active when diarization is also enabled.
+- **State:** `SettingsContext` — `voiceFilterEnabled`, `voiceSamples[]`, `voiceSimilarityThreshold`
+- **Backend:** `transcription_api.rs` normalises each sample to mono 16kHz WAV → `voice_sample_paths` → engine
+
+### Inaudible segment filtering
+When the engine cannot detect audio clearly, the segment is **dropped** — no subtitle generated.
+
+- **Location:** `crates/transcription-engine/src/formatting.rs` → `is_noise_token()`
+- Drops: `[inaudible]`, `(inaudible)`, `blank_audio`, `silence`, `music`, `laughter`, `unintelligible`, `indistinct`, and bracket/paren variants
+- Automatic — no user toggle
 
 ---
 
 ## Notes
 
-- FFmpeg is bundled as a Tauri sidecar binary — do not rely on system FFmpeg
-- The `transcription-engine` crate at `src-tauri/crates/transcription-engine/` is the core logic and is independent of Tauri; it can be used as a standalone library
-- `autosubs_core.lua` is large (~57KB) and handles most of the Resolve integration complexity
-- GPU acceleration is compile-time feature-flagged — check `Cargo.toml` features before editing build scripts
-- DTW (Dynamic Time Warping) is used for more accurate word-level timestamps
-
----
-
-## Fork: Marks Amazing Subtitles
-
-This is a personal fork (`mowen7711/marks-amazing-subtitles`) of the upstream `tmoroney/auto-subs`.
-Push to fork with: `git push myfork main`
-
-### What differs from upstream
-- App renamed to **Marks Amazing Subtitles** (`productName`, identifier, Lua script name)
-- Windows CI build (`.github/workflows/build-windows.yml`) — upstream has no Windows build
-- Console window enabled on Windows (removed `windows_subsystem = "windows"`) for live log output
-- Per-job work logs written to `logs/jobs/` on each transcription
-- All `println!`/`eprintln!` replaced with structured `tracing` logging
-- `tauri.windows.conf.json` — overrides `titleBarStyle` to `Visible` on Windows
-- NSIS wrapper installs VC++ redist + DaVinci Resolve Lua bridge (`install_path.txt`)
-
-### Windows Build — Critical Notes
-- Always use `--no-default-features` for Windows CI — keeps ort **statically linked**
-- Do NOT use `--features windows-cpu` (directml) without bundling `onnxruntime.dll` — `ort/directml` loads it dynamically at startup and calls `process::exit` silently if missing
-- `--features windows` (Vulkan) requires Vulkan SDK in CI — cmake build is fragile, avoid until fixed
-- The `plugins.updater` key must exist in `tauri.conf.json` — if absent/null, the updater plugin panics on Windows at startup (macOS tolerates it)
-- `makensis.exe` is not pre-installed on GitHub Actions runners — find it under `%LOCALAPPDATA%\tauri\` where Tauri downloads its own copy
-
-### Logging
-- `src-tauri/src/logging.rs` — `tracing` setup + `JobLog` struct
-- `JobLog::new()` / `job.step()` / `job.finish()` / `job.fail()` — records each pipeline step
-- Logs land in Tauri's app log dir (`logs/autosubs.log.*`) and `logs/jobs/`
-- In-memory ring buffer (20,000 lines) via `get_backend_logs` Tauri command
-
----
-
-## Features — Implemented
-
-### Inaudible segment filtering
-Handled in `crates/transcription-engine/src/formatting.rs` by `is_noise_token()` (lines 32–47).
-Drops `[inaudible]`, `(inaudible)`, `blank_audio`, `silence`, `music`, `laughter`,
-`unintelligible`, `indistinct`, and similar patterns. No subtitle is generated for these segments.
-Filtering is automatic — there is no user-facing toggle.
-
-### Voice sampling (pre-transcription speaker filtering)
-Fully implemented end-to-end.
-- **UI:** `src/components/settings/diarize-selector.tsx` — "Voice Filter" toggle, file picker,
-  editable sample labels, remove button, "Match Sensitivity" slider (0.5–0.95)
-- **State:** `SettingsContext` — `voiceFilterEnabled`, `voiceSamples[]`, `voiceSimilarityThreshold`
-- **Wired to backend:** `transcription-panel.tsx` passes samples only when diarization + voice filter are both enabled
-- **Backend:** `transcription_api.rs` normalises each sample to mono 16kHz WAV and passes as `voice_sample_paths` to the engine
+- FFmpeg is a bundled sidecar binary — do not rely on system FFmpeg
+- `transcription-engine` is independent of Tauri and can be used as a standalone library
+- On Windows, `transcribe-rs` (Parakeet/Moonshine) is compiled with `default-features = false` to avoid a CRT conflict (esaxx_rs links `/MT`, rest uses `/MD`)
+- DTW (Dynamic Time Warping) is used for accurate word-level timestamps
+- The updater plugin is wired up in `main.rs` with download progress + deferred install, but `createUpdaterArtifacts: false` means no update artifacts are currently published
