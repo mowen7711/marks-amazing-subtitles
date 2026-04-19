@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           cd AutoSubs-App
-          npm run tauri build -- -- --no-default-features
+          npm run tauri build -- -- --no-default-features --features windows
 
       - name: Upload installer to GitHub Release
         shell: bash
