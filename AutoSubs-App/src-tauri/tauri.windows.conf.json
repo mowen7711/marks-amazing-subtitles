@@ -1,0 +1,15 @@
+{
+  "app": {
+    "windows": [
+      {
+        "titleBarStyle": "Visible",
+        "decorations": true,
+        "height": 700,
+        "width": 900,
+        "acceptFirstMouse": true,
+        "zoomHotkeysEnabled": true,
+        "title": ""
+      }
+    ]
+  }
+}
