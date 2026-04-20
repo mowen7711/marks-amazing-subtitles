@@ -120,7 +120,7 @@ if os_name == "Windows" then
         -- Fall back to the default per-user Tauri install location.
         local fallback = os.getenv("LOCALAPPDATA") .. "\\Programs\\Marks Amazing Subtitles"
         log("install_path.txt not found, trying fallback: " .. fallback)
-        local exe_check = io.open(fallback .. "\\Marks Amazing Subtitles.exe", "rb")
+        local exe_check = io.open(fallback .. "\\autosubs.exe", "rb")
         if exe_check then
             exe_check:close()
             install_path = fallback
@@ -128,7 +128,7 @@ if os_name == "Windows" then
         else
             local err = "Could not find Marks Amazing Subtitles.\n" ..
                 "Tried install_path.txt (" .. tostring(result) .. ")\n" ..
-                "Tried fallback: " .. fallback .. "\\Marks Amazing Subtitles.exe\n" ..
+                "Tried fallback: " .. fallback .. "\\autosubs.exe\n" ..
                 "Install the app and restart DaVinci Resolve."
             log("ERROR: " .. err)
             error(err)
@@ -137,7 +137,7 @@ if os_name == "Windows" then
 
     log("Install path: " .. install_path)
 
-    app_executable = install_path .. "\\Marks Amazing Subtitles.exe"
+    app_executable = install_path .. "\\autosubs.exe"
     resources_folder = install_path .. "\\resources"
 
     log("App executable: " .. app_executable)
