@@ -111,14 +111,30 @@ if os_name == "Windows" then
     log("Reading install_path.txt from: " .. storage_path)
 
     local ok, result = pcall(read_file, join_path(storage_path, "install_path.txt"))
-    if not ok then
-        local err = "Could not read install_path.txt: " .. tostring(result) ..
-            "\nRun the MarksAmazingSubs installer first, then restart DaVinci Resolve."
-        log("ERROR: " .. err)
-        error(err)
+    local install_path
+    if ok then
+        install_path = result:gsub("%s+$", "") -- trim trailing whitespace/newlines
+        log("Install path from install_path.txt: " .. install_path)
+    else
+        -- install_path.txt not written (e.g. raw Tauri installer used instead of NSIS wrapper).
+        -- Fall back to the default per-user Tauri install location.
+        local fallback = os.getenv("LOCALAPPDATA") .. "\\Programs\\Marks Amazing Subtitles"
+        log("install_path.txt not found, trying fallback: " .. fallback)
+        local exe_check = io.open(fallback .. "\\Marks Amazing Subtitles.exe", "rb")
+        if exe_check then
+            exe_check:close()
+            install_path = fallback
+            log("Fallback install path found OK")
+        else
+            local err = "Could not find Marks Amazing Subtitles.\n" ..
+                "Tried install_path.txt (" .. tostring(result) .. ")\n" ..
+                "Tried fallback: " .. fallback .. "\\Marks Amazing Subtitles.exe\n" ..
+                "Install the app and restart DaVinci Resolve."
+            log("ERROR: " .. err)
+            error(err)
+        end
     end
 
-    local install_path = result:gsub("%s+$", "") -- trim trailing whitespace/newlines
     log("Install path: " .. install_path)
 
     app_executable = install_path .. "\\Marks Amazing Subtitles.exe"

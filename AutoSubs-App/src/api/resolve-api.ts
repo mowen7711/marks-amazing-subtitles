@@ -98,7 +98,14 @@ export async function addSubtitlesToTimeline(
       conflictMode,
     }),
   });
-  return response.json();
+  const data = await response.json();
+  if (typeof data.message === 'string' && data.message.startsWith('Job failed')) {
+    throw new Error(data.message);
+  }
+  if (data.result === false) {
+    throw new Error('Failed to add subtitles. Check that the subtitle template exists in your DaVinci Resolve media pool.');
+  }
+  return data;
 }
 
 export async function closeResolveLink() {

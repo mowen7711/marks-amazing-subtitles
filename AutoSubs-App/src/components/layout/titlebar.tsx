@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Square, X, Settings, Sun, Moon, Monitor, Heart, Github, Boxes, RotateCcw } from "lucide-react";
+import { Minus, Square, X, Settings, Sun, Moon, Monitor, Heart, Github, Boxes, RotateCcw, Bug } from "lucide-react";
 import type { HistoryIconHandle } from "@/components/ui/history";
 import { platform } from "@tauri-apps/plugin-os";
 import { useTranslation } from "react-i18next";
@@ -39,6 +39,7 @@ import type { Model } from "@/types/interfaces";
 import { useState, useEffect, useRef } from "react";
 import { SettingsDialog } from "@/components/dialogs/settings-dialog";
 import { ManageModelsDialog } from "@/components/settings/model-manager";
+import { DiagnosticsDialog } from "@/components/dialogs/diagnostics-dialog";
 import { ArchiveIcon } from "../ui/archive";
 import { Spinner } from "@/components/ui/spinner";
 import { useUpdateStatus } from "@/hooks/use-update-status";
@@ -128,6 +129,7 @@ function SettingsDropdown() {
   const { modelsState, downloadedModelValues, handleDeleteModel } = useModels();
   const [manageModelsOpen, setManageModelsOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   // The diarization model is handled separately from transcription models and only added
   // to the model manager when it's actually downloaded. This is because it's a different
@@ -172,6 +174,10 @@ function SettingsDropdown() {
               <Boxes className="h-4 w-4 mr-2" />
               <span>{t("models.manage.title", "Manage Models")}</span>
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setDiagnosticsOpen(true)} className="cursor-pointer">
+              <Bug className="h-4 w-4 mr-2" />
+              <span>Diagnostics</span>
+            </DropdownMenuItem>
           </DropdownMenuGroup>
 
           <DropdownMenuSeparator />
@@ -179,7 +185,7 @@ function SettingsDropdown() {
           <DropdownMenuGroup>
             <DropdownMenuItem asChild className="cursor-pointer">
               <a
-                href="https://github.com/tmoroney/auto-subs"
+                href="https://github.com/mowen7711/marks-amazing-subtitles"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group"
@@ -199,7 +205,7 @@ function SettingsDropdown() {
                 className="group relative flex w-full items-center"
               >
                 <Heart className="h-4 w-4 mr-2 text-pink-500 group-data-[highlighted]:fill-pink-500 group-focus:fill-pink-500 transition-all" />
-                <span>{t("settings.support.supportAutoSubs", "Support AutoSubs")}</span>
+                <span>{t("settings.support.supportAutoSubs", "Support Marks Amazing Subtitles")}</span>
 
                 {/* Bursting hearts animation */}
                 <div className="absolute inset-0 pointer-events-none">
@@ -260,6 +266,10 @@ function SettingsDropdown() {
       <SettingsDialog
         open={settingsDialogOpen}
         onOpenChange={setSettingsDialogOpen}
+      />
+      <DiagnosticsDialog
+        open={diagnosticsOpen}
+        onOpenChange={setDiagnosticsOpen}
       />
     </>
   );

@@ -244,7 +244,7 @@ function TranscriptionPanelView({
           <div className="flex flex-col items-center justify-center h-full space-y-2 pb-12 text-center">
             <img
               src="/autosubs-logo.png"
-              alt="AutoSubs"
+              alt="Marks Amazing Subtitles"
               className="w-16 h-16"
             />
             <h2 className="text-lg font-semibold">
@@ -508,20 +508,15 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
   }
 
   const handleAddToTimeline = async (selectedOutputTrack: string, selectedTemplate: string) => {
-    try {
-      if (!currentTranscriptFilename) {
-        console.error("No active transcript file to add to timeline")
-        return
-      }
-
-      await pushToTimeline(
-        currentTranscriptFilename,
-        selectedTemplate,
-        selectedOutputTrack,
-      )
-    } catch (error) {
-      console.error("Failed to add to timeline:", error)
+    if (!currentTranscriptFilename) {
+      throw new Error("No active transcript to add to timeline")
     }
+
+    await pushToTimeline(
+      currentTranscriptFilename,
+      selectedTemplate,
+      selectedOutputTrack,
+    )
   }
 
   const handleStartTranscription = async () => {

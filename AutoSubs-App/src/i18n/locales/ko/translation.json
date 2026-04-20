@@ -292,7 +292,7 @@
     "export": "내보내기"
   },
   "settings": {
-    "description": "AutoSubs 환경설정 및 옵션을 구성합니다.",
+    "description": "Marks Amazing Subtitles 환경설정 및 옵션을 구성합니다.",
     "dtw": {
       "description": "단어 수준 타이밍 정확도 향상",
       "title": "동적 시간 왜곡"
@@ -314,7 +314,7 @@
     },
     "support": {
       "helpSupportDevelopment": "개발 지원하기",
-      "supportAutoSubs": "AutoSubs 지원",
+      "supportAutoSubs": "Marks Amazing Subtitles 지원",
       "viewSource": "기여하기"
     },
     "title": "설정",
@@ -396,7 +396,7 @@
         "cantConnect": "타임라인에 연결할 수 없습니다",
         "connected": "연결됨",
         "currentlyViewing": "현재 보기: {{name}}",
-        "openResolve": "DaVinci Resolve를 열고 작업 공간 → 스크립트 → AutoSubs로 이동하세요",
+        "openResolve": "DaVinci Resolve를 열고 작업 공간 → 스크립트 → Marks Amazing Subtitles로 이동하세요",
         "ready": "타임라인 접근 준비 완료"
       }
     },
@@ -413,9 +413,9 @@
   "workspace": {
     "empty": {
       "loadingModel": "모델을 메모리에 불러오는 중...",
-      "support": "AutoSubs 지원",
+      "support": "Marks Amazing Subtitles 지원",
       "welcomeDescription": "자막 생성을 시작하려면 오디오 소스를 선택하세요.",
-      "welcomeTitle": "AutoSubs에 오신 것을 환영합니다"
+      "welcomeTitle": "Marks Amazing Subtitles에 오신 것을 환영합니다"
     }
   },
   "addToTimeline": {

@@ -639,13 +639,13 @@ function ExportAudio(outputDir, inputTracks)
     -- Get individual clips for segment-based transcription
     local individualClips = get_individual_clips(timeline, selected)
     currentExportJob.individualClips = individualClips
-    print("[AutoSubs] Found " .. #individualClips .. " individual clip(s) for transcription")
+    print("[MAS] Found " .. #individualClips .. " individual clip(s) for transcription")
 
     if clipStart and clipEnd then
-        print("[AutoSubs] Found clip boundaries: " .. clipStart .. " - " .. clipEnd)
+        print("[MAS] Found clip boundaries: " .. clipStart .. " - " .. clipEnd)
         currentExportJob.clipBoundaries = { start = clipStart, ["end"] = clipEnd }
     else
-        print("[AutoSubs] No clips found on selected tracks, using full timeline")
+        print("[MAS] No clips found on selected tracks, using full timeline")
     end
 
     resolve:OpenPage("deliver")
@@ -655,7 +655,7 @@ function ExportAudio(outputDir, inputTracks)
     -- Build render settings
     local renderSettings = {
         TargetDir = outputDir,
-        CustomName = "autosubs-exported-audio",
+        CustomName = "mas-exported-audio",
         RenderMode = "Single clip",
         IsExportVideo = false,
         IsExportAudio = true,
@@ -667,7 +667,7 @@ function ExportAudio(outputDir, inputTracks)
     if clipStart and clipEnd then
         renderSettings.MarkIn = clipStart
         renderSettings.MarkOut = clipEnd
-        print("[AutoSubs] Setting render range in settings: " .. clipStart .. " - " .. clipEnd)
+        print("[MAS] Setting render range in settings: " .. clipStart .. " - " .. clipEnd)
     end
 
     project:SetRenderSettings(renderSettings)
@@ -915,12 +915,12 @@ local function apply_conflict_mode(timeline, subtitles, trackIndex, conflictMode
             if hasConflict then
                 trackIndex = timeline:GetTrackCount("video") + 1
                 timeline:AddTrack("video")
-                print("[AutoSubs] Created new track: " .. trackIndex)
+                print("[MAS] Created new track: " .. trackIndex)
             else
-                print("[AutoSubs] No conflicts on track " .. trackIndex .. ", using existing track")
+                print("[MAS] No conflicts on track " .. trackIndex .. ", using existing track")
             end
         else
-            print("[AutoSubs] Track " .. trackIndex .. " is empty, using existing track")
+            print("[MAS] Track " .. trackIndex .. " is empty, using existing track")
         end
         return trackIndex, subtitles, nil
     end
@@ -943,7 +943,7 @@ local function apply_conflict_mode(timeline, subtitles, trackIndex, conflictMode
             for _, clip in ipairs(clipsToDelete) do
                 timeline:DeleteClips({clip}, false)
             end
-            print("[AutoSubs] Deleted " .. #clipsToDelete .. " conflicting clips")
+            print("[MAS] Deleted " .. #clipsToDelete .. " conflicting clips")
         end
 
         return trackIndex, subtitles, nil
@@ -972,11 +972,11 @@ local function apply_conflict_mode(timeline, subtitles, trackIndex, conflictMode
                 end
             end
 
-            print("[AutoSubs] Skipped " .. (#subtitles - #filteredSubtitles) .. " conflicting subtitles")
+            print("[MAS] Skipped " .. (#subtitles - #filteredSubtitles) .. " conflicting subtitles")
             subtitles = filteredSubtitles
 
             if #subtitles == 0 then
-                print("[AutoSubs] All subtitles skipped due to conflicts")
+                print("[MAS] All subtitles skipped due to conflicts")
                 return trackIndex, subtitles, { success = true, message = "All subtitles skipped due to existing content", added = 0 }
             end
         end
@@ -1085,7 +1085,7 @@ local function apply_subtitle_text(timelineItems, subtitles, speakers, speakersE
             if comp ~= nil then
                 local template = comp:FindTool("Template")
                 if template == nil then
-                    print("[AutoSubs] Warning: 'Template' tool not found in Fusion comp for clip " .. i)
+                    print("[MAS] Warning: 'Template' tool not found in Fusion comp for clip " .. i)
                     return
                 end
                 if isAnimated then
@@ -1106,7 +1106,7 @@ local function apply_subtitle_text(timelineItems, subtitles, speakers, speakersE
 
                 timelineItem:SetClipColor("Green") -- Visualise updated clips
             else
-                print("[AutoSubs] Warning: No Fusion comp accessible for clip " .. i .. " (Resolve 20+: try reopening the script)")
+                print("[MAS] Warning: No Fusion comp accessible for clip " .. i .. " (Resolve 20+: try reopening the script)")
             end
         end)
 
@@ -1308,9 +1308,9 @@ function LaunchApp()
         local result_open = shell32.ShellExecuteA(nil, "open", main_app, nil, nil, SW_SHOW)
 
         if result_open > 32 then
-            print("AutoSubs launched successfully.")
+            print("Marks Amazing Subtitles launched successfully.")
         else
-            print("Failed to launch AutoSubs. Error code:", result_open)
+            print("Failed to launch Marks Amazing Subtitles. Error code:", result_open)
             return
         end
     else
@@ -1318,9 +1318,9 @@ function LaunchApp()
         local result_open = ffi.C.system(command_open)
 
         if result_open == 0 then
-            print("AutoSubs launched successfully.")
+            print("Marks Amazing Subtitles launched successfully.")
         else
-            print("Failed to launch AutoSubs. Error code:", result_open)
+            print("Failed to launch Marks Amazing Subtitles. Error code:", result_open)
             return
         end
     end
@@ -1372,7 +1372,7 @@ function StartServer()
     end
 
     assert(server:listen())
-    print("AutoSubs server is listening on port: ", PORT)
+    print("Marks Amazing Subtitles server is listening on port: ", PORT)
     print("Press Ctrl+C to stop the server")
 
     -- Launch app if not in dev mode
@@ -1452,40 +1452,40 @@ function StartServer()
                     success, err = pcall(function()
                         if data ~= nil then
                             if data.func == "GetTimelineInfo" then
-                                print("[AutoSubs Server] Retrieving Timeline Info...")
+                                print("[MAS Server] Retrieving Timeline Info...")
                                 local timelineInfo = GetTimelineInfo()
                                 body = json.encode(timelineInfo)
                             elseif data.func == "JumpToTime" then
-                                print("[AutoSubs Server] Jumping to time...")
+                                print("[MAS Server] Jumping to time...")
                                 JumpToTime(data.seconds)
                                 body = json.encode({
                                     message = "Jumped to time"
                                 })
                             elseif data.func == "ExportAudio" then
-                                print("[AutoSubs Server] Exporting audio...")
+                                print("[MAS Server] Exporting audio...")
                                 local audioInfo = ExportAudio(data.outputDir, data.inputTracks)
                                 body = json.encode(audioInfo)
                             elseif data.func == "GetExportProgress" then
-                                print("[AutoSubs Server] Getting export progress...")
+                                print("[MAS Server] Getting export progress...")
                                 local progressInfo = GetExportProgress()
                                 body = json.encode(progressInfo)
                             elseif data.func == "CancelExport" then
-                                print("[AutoSubs Server] Cancelling export...")
+                                print("[MAS Server] Cancelling export...")
                                 local cancelResult = CancelExport()
                                 body = json.encode(cancelResult)
                             elseif data.func == "CheckTrackConflicts" then
-                                print("[AutoSubs Server] Checking track conflicts...")
+                                print("[MAS Server] Checking track conflicts...")
                                 local conflictInfo = CheckTrackConflicts(data.filePath, data.trackIndex)
                                 body = json.encode(conflictInfo)
                             elseif data.func == "AddSubtitles" then
-                                print("[AutoSubs Server] Adding subtitles to timeline...")
+                                print("[MAS Server] Adding subtitles to timeline...")
                                 local result = AddSubtitles(data.filePath, data.trackIndex, data.templateName, data.conflictMode)
                                 body = json.encode({
                                     message = "Job completed",
                                     result = result
                                 })
                             elseif data.func == "GeneratePreview" then
-                                print("[AutoSubs Server] Generating preview...")
+                                print("[MAS Server] Generating preview...")
                                 local previewPath = GeneratePreview(data.speaker, data.templateName, data.exportPath)
                                 body = json.encode(previewPath)
                             elseif data.func == "Exit" then
@@ -1552,7 +1552,7 @@ function StartServer()
         sleep(0.1)
     end
 
-    print("Shutting down AutoSubs Link server...")
+    print("Shutting down Marks Amazing Subtitles server...")
     server:close()
     print("Server shut down.")
 end
@@ -1580,7 +1580,7 @@ local AutoSubs = {
             if ffi.os == "OSX" then
                 main_app = executable_path
                 resources_path = resources_folder
-                command_open = 'open ' .. main_app
+                command_open = 'open "' .. main_app .. '"'
             else -- Linux
                 main_app = executable_path
                 resources_path = resources_folder

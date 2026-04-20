@@ -4,6 +4,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, RwLock};
 
+use serde_json;
+
 use chrono::Local;
 use once_cell::sync::Lazy;
 use tauri::{AppHandle, Manager, Runtime};
@@ -103,7 +105,18 @@ pub fn init_logging<R: Runtime>(app: &AppHandle<R>) {
         .with_level(true)
         .compact();
 
-    let subscriber = Registry::default().with(file_layer).with(mem_layer);
+    // Stdout layer — live output in the console window (ANSI colours on Windows 10+)
+    let stdout_layer = fmt::layer()
+        .with_ansi(true)
+        .with_writer(std::io::stdout)
+        .with_target(true)
+        .with_level(true)
+        .compact();
+
+    let subscriber = Registry::default()
+        .with(file_layer)
+        .with(mem_layer)
+        .with(stdout_layer);
     let _ = tracing::subscriber::set_global_default(subscriber);
 
     tracing::info!(target: "autosubs", path = %log_dir.display(), "logging initialized");
@@ -258,4 +271,43 @@ pub fn export_backend_logs<R: Runtime>(app: AppHandle<R>) -> Result<String, Stri
     fs::write(&out_path, content).map_err(|e| e.to_string())?;
 
     Ok(out_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn get_lua_log() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        let temp = match std::env::var("TEMP").or_else(|_| std::env::var("TMP")) {
+            Ok(t) => t,
+            Err(_) => return "TEMP environment variable not set.".to_string(),
+        };
+        let log_path = std::path::Path::new(&temp).join("MarksAmazingSubs_launch.log");
+        match fs::read_to_string(&log_path) {
+            Ok(content) => content,
+            Err(_) => format!(
+                "Lua log not found at: {}\\MarksAmazingSubs_launch.log\nRun the 'Marks Amazing Subtitles' script in DaVinci Resolve (Workspace → Scripts) first.",
+                temp
+            ),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let log_path = std::path::Path::new("/tmp/MarksAmazingSubs_launch.log");
+        match fs::read_to_string(log_path) {
+            Ok(content) => content,
+            Err(_) => "Lua log not found at /tmp/MarksAmazingSubs_launch.log.\nRun the 'Marks Amazing Subtitles' script in DaVinci Resolve (Workspace → Scripts) first.".to_string(),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_app_diagnostics<R: Runtime>(app: AppHandle<R>) -> serde_json::Value {
+    let log_dir = resolve_log_dir(&app);
+    let version = app.package_info().version.to_string();
+    serde_json::json!({
+        "app_version": version,
+        "log_dir": log_dir.to_string_lossy().to_string(),
+        "platform": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    })
 }

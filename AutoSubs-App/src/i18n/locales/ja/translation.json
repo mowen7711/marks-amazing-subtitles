@@ -277,7 +277,7 @@
     "export": "エクスポート"
   },
   "settings": {
-    "description": "AutoSubs の設定とオプションを構成します。",
+    "description": "Marks Amazing Subtitles の設定とオプションを構成します。",
     "dtw": {
       "description": "単語レベルのタイミング精度を向上",
       "title": "動的時間伸縮法"
@@ -299,7 +299,7 @@
     },
     "support": {
       "helpSupportDevelopment": "開発を支援",
-      "supportAutoSubs": "AutoSubs をサポート",
+      "supportAutoSubs": "Marks Amazing Subtitles をサポート",
       "viewSource": "コントリビュート"
     },
     "title": "設定",
@@ -372,7 +372,7 @@
         "cantConnect": "タイムラインに接続できません",
         "connected": "接続済み",
         "currentlyViewing": "現在表示中：{{name}}",
-        "openResolve": "DaVinci Resolve を開き、ワークスペース → スクリプト → AutoSubs に移動してください",
+        "openResolve": "DaVinci Resolve を開き、ワークスペース → スクリプト → Marks Amazing Subtitles に移動してください",
         "ready": "タイムラインへのアクセスの準備が完了"
       }
     },
@@ -389,9 +389,9 @@
   "workspace": {
     "empty": {
       "loadingModel": "モデルをメモリに読み込み中...",
-      "support": "AutoSubs をサポート",
+      "support": "Marks Amazing Subtitles をサポート",
       "welcomeDescription": "字幕の生成を開始するには音声ソースを選択してください。",
-      "welcomeTitle": "AutoSubs へようこそ"
+      "welcomeTitle": "Marks Amazing Subtitles へようこそ"
     }
   },
   "addToTimeline": {

@@ -306,8 +306,8 @@ function getLegacyTranscriptFilename(isStandaloneMode: boolean, selectedFile: st
 
 // Get the transcripts storage directory
 export async function getTranscriptsDir(): Promise<string> {
-  // Store in user's Documents/AutoSubs-Transcripts for persistence across reinstalls
-  const dir = await join(await documentDir(), "AutoSubs-Transcripts");
+  // Store in user's Documents/MarksAmazingSubs-Transcripts for persistence across reinstalls
+  const dir = await join(await documentDir(), "MarksAmazingSubs-Transcripts");
 
   // Ensure the directory exists
   try {

@@ -1,7 +1,7 @@
 {
   "settings": {
     "title": "Einstellungen",
-    "description": "Konfiguriere deine AutoSubs-Einstellungen und Optionen.",
+    "description": "Konfiguriere deine Marks Amazing Subtitles-Einstellungen und Optionen.",
     "sections": {
       "transcription": "Transkription",
       "support": "Support",
@@ -27,7 +27,7 @@
       "confirmTitle": "Einstellungen zurücksetzen"
     },
     "support": {
-      "supportAutoSubs": "AutoSubs unterstützen",
+      "supportAutoSubs": "Marks Amazing Subtitles unterstützen",
       "helpSupportDevelopment": "Unterstütze die Entwicklung",
       "viewSource": "Quellcode ansehen"
     }
@@ -164,9 +164,9 @@
   "workspace": {
     "empty": {
       "loadingModel": "Modell wird in den Speicher geladen...",
-      "welcomeTitle": "Willkommen bei AutoSubs",
+      "welcomeTitle": "Willkommen bei Marks Amazing Subtitles",
       "welcomeDescription": "Wähle eine Audioquelle aus, um Untertitel zu generieren.",
-      "support": "AutoSubs unterstützen"
+      "support": "Marks Amazing Subtitles unterstützen"
     }
   },
   "modelStatus": {
@@ -411,7 +411,7 @@
         "ready": "Bereit für Zugriff auf die Timeline",
         "canGetAudio": "Du kannst Audio aus der Timeline holen und Untertitel wieder hinzufügen.",
         "cantConnect": "Keine Verbindung zur Timeline möglich",
-        "openResolve": "Öffne DaVinci Resolve und gehe zu Arbeitsbereich → Skripte → AutoSubs"
+        "openResolve": "Öffne DaVinci Resolve und gehe zu Arbeitsbereich → Skripte → Marks Amazing Subtitles"
       }
     }
   },

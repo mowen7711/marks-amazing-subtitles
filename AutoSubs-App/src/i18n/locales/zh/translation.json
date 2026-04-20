@@ -1,7 +1,7 @@
 {
   "settings": {
     "title": "设置",
-    "description": "配置您的 AutoSubs 偏好和选项。",
+    "description": "配置您的 Marks Amazing Subtitles 偏好和选项。",
     "sections": {
       "transcription": "转录",
       "support": "支持",
@@ -27,7 +27,7 @@
       "confirmTitle": "重置设置"
     },
     "support": {
-      "supportAutoSubs": "支持 AutoSubs",
+      "supportAutoSubs": "支持 Marks Amazing Subtitles",
       "helpSupportDevelopment": "帮助支持开发",
       "viewSource": "查看源代码"
     }
@@ -164,9 +164,9 @@
   "workspace": {
     "empty": {
       "loadingModel": "正在将模型加载到内存...",
-      "welcomeTitle": "欢迎使用 AutoSubs",
+      "welcomeTitle": "欢迎使用 Marks Amazing Subtitles",
       "welcomeDescription": "选择音频源以开始生成字幕。",
-      "support": "支持 AutoSubs"
+      "support": "支持 Marks Amazing Subtitles"
     }
   },
   "modelStatus": {
@@ -411,7 +411,7 @@
         "ready": "已准备好访问时间线",
         "canGetAudio": "您可以从时间线获取音频，并将字幕添加回时间线。",
         "cantConnect": "无法连接到时间线",
-        "openResolve": "打开 DaVinci Resolve，然后前往 Workspace → Scripts → AutoSubs"
+        "openResolve": "打开 DaVinci Resolve，然后前往 Workspace → Scripts → Marks Amazing Subtitles"
       }
     }
   },

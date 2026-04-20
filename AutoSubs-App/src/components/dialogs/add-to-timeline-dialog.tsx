@@ -50,6 +50,7 @@ export function AddToTimelineDialog({
     const [selectedTemplate, setSelectedTemplate] = useState(settings.selectedTemplate.value)
     const [localSpeakers, setLocalSpeakers] = useState<Speaker[]>(speakers)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [submitError, setSubmitError] = useState<string | null>(null)
 
     const hasSpeakers = speakers.length > 0
     const activeSteps = hasSpeakers ? STEPS : [STEPS[0], STEPS[2]]
@@ -61,11 +62,13 @@ export function AddToTimelineDialog({
             setSelectedOutputTrack(settings.selectedOutputTrack)
             setSelectedTemplate(settings.selectedTemplate.value)
             setLocalSpeakers(speakers)
+            setSubmitError(null)
         }
     }, [open, settings, speakers])
 
     const handleSubmit = async () => {
         setIsSubmitting(true)
+        setSubmitError(null)
         try {
             if (localSpeakers.length > 0) {
                 await updateSpeakers(localSpeakers)
@@ -74,6 +77,7 @@ export function AddToTimelineDialog({
             setOpen(false)
         } catch (error) {
             console.error('Failed to add to timeline:', error)
+            setSubmitError(error instanceof Error ? error.message : 'Failed to add to timeline')
         } finally {
             setIsSubmitting(false)
         }
@@ -204,6 +208,9 @@ export function AddToTimelineDialog({
                     )}
                 </div>
 
+                {submitError && (
+                    <p className="text-sm text-destructive px-1">{submitError}</p>
+                )}
                 <DialogFooter className="flex flex-row justify-between sm:justify-between gap-2">
                     <Button
                         type="button"

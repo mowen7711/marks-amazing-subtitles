@@ -8,6 +8,8 @@ interface ResolveContextType {
   isExporting: boolean;
   exportProgress: number;
   cancelRequestedRef: React.MutableRefObject<boolean>;
+  lastConnectionError: string | null;
+  connectionAttempts: number;
   refresh: () => Promise<void>;
   pushToTimeline: (filename?: string, selectedTemplate?: string, selectedOutputTrack?: string) => Promise<void>;
   getSourceAudio: (isStandaloneMode: boolean, fileInput: string | null, inputTracks: string[]) => Promise<{ path: string, offset: number } | null>;
@@ -27,27 +29,69 @@ export function ResolveProvider({ children }: { children: React.ReactNode }) {
   const [exportProgress, setExportProgress] = useState<number>(0);
   const cancelRequestedRef = useRef<boolean>(false);
 
+  // Connection diagnostics
+  const [lastConnectionError, setLastConnectionError] = useState<string | null>(null);
+  const [connectionAttempts, setConnectionAttempts] = useState<number>(0);
+
   // Initialize timeline info
   useEffect(() => {
     async function initializeTimeline() {
+      const ts = new Date().toISOString();
+      console.log(`[MAS ${ts}] Fetching timeline info from port 56003...`);
+      setConnectionAttempts(prev => prev + 1);
       try {
-        console.log('Fetching timeline info...');
-        const info = await getTimelineInfo().catch(() => {
-          console.log('Link to Resolve is offline');
+        const info = await getTimelineInfo().catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`[MAS ${ts}] Resolve offline: ${msg}`);
+          setLastConnectionError(`${ts}: ${msg}`);
           return null;
         });
 
         if (info && info.timelineId) {
-          console.log('Timeline info received:', info);
+          console.log(`[MAS ${ts}] Connected — timeline "${info.name}" (id=${info.timelineId})`);
+          setLastConnectionError(null);
           setTimelineInfo(info);
+        } else if (info) {
+          const msg = `Connected but no active timeline (timelineId empty). Response: ${JSON.stringify(info)}`;
+          console.log(`[MAS ${ts}] ${msg}`);
+          setLastConnectionError(`${ts}: ${msg}`);
         }
       } catch (error) {
-        console.error('Error initializing timeline:', error);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error(`[MAS ${ts}] Error initializing timeline: ${msg}`);
+        setLastConnectionError(`${ts}: ${msg}`);
       }
     }
 
     initializeTimeline();
   }, []);
+
+  // Poll for Resolve connection every 5 seconds when not connected
+  useEffect(() => {
+    if (timelineInfo.timelineId) return;
+
+    const interval = setInterval(async () => {
+      const ts = new Date().toISOString();
+      setConnectionAttempts(prev => prev + 1);
+      try {
+        const info = await getTimelineInfo().catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          setLastConnectionError(`${ts}: ${msg}`);
+          return null;
+        });
+        if (info?.timelineId) {
+          console.log(`[MAS ${ts}] Poll connected — timeline "${info.name}"`);
+          setLastConnectionError(null);
+          setTimelineInfo(info);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setLastConnectionError(`${ts}: ${msg}`);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [timelineInfo.timelineId]);
 
   async function refresh() {
     try {
@@ -158,6 +202,8 @@ export function ResolveProvider({ children }: { children: React.ReactNode }) {
       isExporting,
       exportProgress,
       cancelRequestedRef,
+      lastConnectionError,
+      connectionAttempts,
       refresh,
       pushToTimeline,
       getSourceAudio,

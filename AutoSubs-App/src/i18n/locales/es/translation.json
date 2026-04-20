@@ -1,7 +1,7 @@
 {
   "settings": {
     "title": "Ajustes",
-    "description": "Configura tus preferencias y opciones de AutoSubs.",
+    "description": "Configura tus preferencias y opciones de Marks Amazing Subtitles.",
     "sections": {
       "transcription": "Transcripción",
       "support": "Soporte",
@@ -27,7 +27,7 @@
       "confirmTitle": "Restablecer ajustes"
     },
     "support": {
-      "supportAutoSubs": "Apoyar AutoSubs",
+      "supportAutoSubs": "Apoyar Marks Amazing Subtitles",
       "helpSupportDevelopment": "Ayuda a apoyar el desarrollo",
       "viewSource": "Ver código fuente"
     }
@@ -164,9 +164,9 @@
   "workspace": {
     "empty": {
       "loadingModel": "Cargando el modelo en memoria...",
-      "welcomeTitle": "Bienvenido a AutoSubs",
+      "welcomeTitle": "Bienvenido a Marks Amazing Subtitles",
       "welcomeDescription": "Selecciona una fuente de audio para empezar a generar subtítulos.",
-      "support": "Apoyar AutoSubs"
+      "support": "Apoyar Marks Amazing Subtitles"
     }
   },
   "modelStatus": {
@@ -411,7 +411,7 @@
         "ready": "Listo para acceder a la línea de tiempo",
         "canGetAudio": "Puedes obtener el audio de la línea de tiempo y añadirle subtítulos.",
         "cantConnect": "No se puede conectar a la línea de tiempo",
-        "openResolve": "Abre DaVinci Resolve y ve a Workspace → Scripts → AutoSubs"
+        "openResolve": "Abre DaVinci Resolve y ve a Workspace → Scripts → Marks Amazing Subtitles"
       }
     }
   },

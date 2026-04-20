@@ -41,25 +41,6 @@ fn trigger_install_update(state: tauri::State<InstallSignal>) {
 }
 
 fn main() {
-    // Startup diagnostics — remove once root cause is found
-    #[cfg(target_os = "windows")]
-    {
-        // Capture any panic to a file since there is no console
-        std::panic::set_hook(Box::new(|info| {
-            let msg = format!("PANIC: {}", info);
-            let _ = std::fs::write("C:\\Users\\Public\\autosubs_panic.txt", msg);
-        }));
-
-        let _ = std::fs::write(
-            "C:\\Users\\Public\\autosubs_started.txt",
-            "main() reached - exe is running",
-        );
-    }
-
-    // Note: whisper-diarize-rs handles whisper_rs logging internally
-    #[cfg(target_os = "windows")]
-    let _ = std::fs::write("C:\\Users\\Public\\autosubs_started.txt", "building Tauri app");
-
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -73,9 +54,6 @@ fn main() {
         .plugin(clipboard_plugin())
         .plugin(opener_plugin())
         .setup(|app| {
-            #[cfg(target_os = "windows")]
-            let _ = std::fs::write("C:\\Users\\Public\\autosubs_started.txt", "setup() reached");
-
             // Initialize backend logging (file + in-memory ring buffer)
             crate::logging::init_logging(&app.handle());
 
@@ -227,15 +205,13 @@ fn main() {
             logging::clear_backend_logs,
             logging::get_log_dir,
             logging::export_backend_logs,
+            logging::get_lua_log,
+            logging::get_app_diagnostics,
             trigger_install_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building Tauri application")
         .run(|app, event| {
-            #[cfg(target_os = "windows")]
-            if matches!(event, RunEvent::Ready) {
-                let _ = std::fs::write("C:\\Users\\Public\\autosubs_started.txt", "run() reached - window should be visible");
-            }
             match event {
                 RunEvent::ExitRequested { api, .. } => {
                     // If we're already exiting, don't intercept again; allow exit to proceed

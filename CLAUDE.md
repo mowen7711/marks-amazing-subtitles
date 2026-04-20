@@ -239,6 +239,31 @@ When the engine cannot detect audio clearly, the segment is **dropped** — no s
 
 ---
 
+## DaVinci Resolve Integration
+
+### Connection Flow
+- At app startup, `ResolveContext` fetches timeline info from the Lua server once.
+- If Resolve is not running yet, it **polls every 5 seconds** until connected — the "Add to Timeline" button appears automatically once the Lua server responds.
+- Once connected, polling stops; `refresh()` can be called manually (triggered when the track selector opens).
+
+### Add to Timeline Flow
+1. Completion step → "Add to Timeline" button (only visible when `timelineInfo.timelineId` is set)
+2. `AddToTimelineDialog` — 2–3 step wizard: choose template, optional speaker styling, choose output track
+3. `handleAddToTimeline()` (`transcription-panel.tsx`) → `pushToTimeline()` (`ResolveContext`) → `addSubtitlesToTimeline()` (`resolve-api.ts`)
+4. HTTP POST to `http://localhost:56003/` with `{func: "AddSubtitles", filePath, templateName, trackIndex, conflictMode}`
+5. Lua `AddSubtitles()` in `autosubs_core.lua:1126` writes subtitle clips to the timeline
+
+### Error handling
+- `addSubtitlesToTimeline()` checks the Lua response: throws if `message` starts with `"Job failed"` or `result === false`
+- Errors propagate from `handleAddToTimeline` (no try/catch) → caught by the dialog → shown as red error text inside the dialog
+
+### Transcript storage
+- Transcripts saved to `~/Documents/MarksAmazingSubs-Transcripts/<name>__<id>.json`
+- Full path constructed by `getTranscriptPath(filename)` and sent to Lua as `filePath`
+- Lua reads this file using `io.open` (macOS) or `_wfopen` FFI (Windows, for Unicode paths)
+
+---
+
 ## Notes
 
 - FFmpeg is a bundled sidecar binary — do not rely on system FFmpeg
@@ -246,3 +271,4 @@ When the engine cannot detect audio clearly, the segment is **dropped** — no s
 - On Windows, `transcribe-rs` (Parakeet/Moonshine) is compiled with `default-features = false` to avoid a CRT conflict (esaxx_rs links `/MT`, rest uses `/MD`)
 - DTW (Dynamic Time Warping) is used for accurate word-level timestamps
 - The updater plugin is wired up in `main.rs` with download progress + deferred install, but `createUpdaterArtifacts: false` means no update artifacts are currently published
+- `main.rs` has no diagnostic/debug file writes — those were removed once the Windows startup crash was resolved
