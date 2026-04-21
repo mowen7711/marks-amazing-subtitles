@@ -2,9 +2,8 @@
 ---I disable the undefined global warnings for them to stop my editor from complaining
 ---@diagnostic disable: undefined-global
 local ffi = ffi
--- Resolve() creates the API object in external/utility script contexts.
--- In some Resolve versions the object is pre-set as a global; fall back to that.
-local resolve = (type(rawget(_G, "Resolve")) == "function" and Resolve()) or rawget(_G, "resolve")
+-- resolve is initialised in Init() once we are inside the active script context.
+local resolve = nil
 
 local DEV_MODE = false
 
@@ -82,10 +81,10 @@ local resources_path
 local main_app
 local command_open
 
--- Load Resolve objects
-local projectManager = resolve:GetProjectManager()
-local project = projectManager:GetCurrentProject()
-local mediaPool = project:GetMediaPool()
+-- Resolve objects — populated in Init() once resolve is available
+local projectManager = nil
+local project = nil
+local mediaPool = nil
 
 local ANIMATED_CAPTION = "AutoSubs Caption"
 
@@ -1561,6 +1560,18 @@ end
 
 local AutoSubs = {
     Init = function(self, executable_path, resources_folder, dev_mode)
+        -- Initialise the Resolve API object now that we are inside the active
+        -- script context (module-level access is too early on some Resolve versions).
+        resolve = rawget(_G, "resolve") or
+                  (type(rawget(_G, "Resolve")) == "function" and Resolve()) or
+                  nil
+        if not resolve then
+            error("Could not obtain DaVinci Resolve API object. Make sure DaVinci Resolve is running and the script is launched from Workspace → Scripts.")
+        end
+        projectManager = resolve:GetProjectManager()
+        project = projectManager:GetCurrentProject()
+        mediaPool = project:GetMediaPool()
+
         DEV_MODE = dev_mode
         if ffi.os == "Windows" then
             -- Define Windows API functions using FFI to prevent terminal opening
