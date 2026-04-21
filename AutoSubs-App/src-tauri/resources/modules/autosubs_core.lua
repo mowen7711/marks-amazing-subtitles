@@ -2,7 +2,9 @@
 ---I disable the undefined global warnings for them to stop my editor from complaining
 ---@diagnostic disable: undefined-global
 local ffi = ffi
-local resolve = Resolve()
+-- Resolve() creates the API object in external/utility script contexts.
+-- In some Resolve versions the object is pre-set as a global; fall back to that.
+local resolve = (type(rawget(_G, "Resolve")) == "function" and Resolve()) or rawget(_G, "resolve")
 
 local DEV_MODE = false
 
