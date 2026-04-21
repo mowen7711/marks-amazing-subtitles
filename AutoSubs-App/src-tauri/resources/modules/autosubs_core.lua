@@ -1127,6 +1127,12 @@ end
 function AddSubtitles(filePath, trackIndex, templateName, conflictMode)
     resolve:OpenPage("edit")
 
+    -- Refresh project/mediaPool — they may be stale if captured at Init() time
+    project = projectManager:GetCurrentProject()
+    if not project then return false, "No active project in DaVinci Resolve" end
+    mediaPool = project:GetMediaPool()
+    if not mediaPool then return false, "Could not get media pool" end
+
     local data = load_subtitle_data(filePath)
     if not data then
         return false
@@ -1167,6 +1173,9 @@ function AddSubtitles(filePath, trackIndex, templateName, conflictMode)
     local clipList = build_clip_list(subtitles, speakers, speakersExist, trackIndex, templateItem, frame_rate,
         template_frame_rate, timelineStart)
     local timelineItems = mediaPool:AppendToTimeline(clipList)
+    if not timelineItems then
+        return false, "AppendToTimeline failed — check that a timeline is open in the Edit page and the template exists"
+    end
 
     local isAnimated = templateName == ANIMATED_CAPTION and true or false
 
