@@ -1607,6 +1607,10 @@ local AutoSubs = {
         socket = require("ljsocket")
         json = require("dkjson")
         luaresolve = require("libavutil")
+        -- load_library calls Fusion() so it must run here in the active context
+        luaresolve.library = luaresolve.load_library(
+            iif(ffi.os == "Windows", "avutil*.dll", iif(ffi.os == "OSX", "libavutil*.dylib", "libavutil.so"))
+        )
 
         assets_path = join_path(resources_path, "AutoSubs")
         StartServer()

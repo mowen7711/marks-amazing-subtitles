@@ -111,9 +111,11 @@ luaresolve =
     end,
 }
 
-libavutil = 
+libavutil =
 {
-	library = luaresolve.load_library(iif(ffi.os == "Windows", "avutil*.dll", iif(ffi.os == "OSX", "libavutil*.dylib", "libavutil.so"))),
+	-- library is set by the caller after require() so that load_library (which calls
+	-- Fusion()) runs in the active script context rather than at module load time.
+	library = nil,
 
 	demand_version = function(self, version)
 		local library_version = self:av_version_info()
