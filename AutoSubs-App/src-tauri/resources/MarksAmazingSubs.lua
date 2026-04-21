@@ -113,7 +113,7 @@ if os_name == "Windows" then
     local ok, result = pcall(read_file, join_path(storage_path, "install_path.txt"))
     local install_path
     if ok then
-        install_path = result:gsub("%s+$", "") -- trim trailing whitespace/newlines
+        install_path = result:match("^%s*(.-)%s*$") -- trim leading and trailing whitespace
         log("Install path from install_path.txt: " .. install_path)
     else
         -- install_path.txt not written (e.g. raw Tauri installer used instead of NSIS wrapper).
