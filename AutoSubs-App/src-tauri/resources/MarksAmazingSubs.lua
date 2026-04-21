@@ -104,10 +104,13 @@ log("Loading autosubs_core module from: " .. resources_folder)
 local modules_path = join_path(resources_folder, "modules")
 package.path = package.path .. ";" .. join_path(modules_path, "?.lua")
 
--- Force-evict any cached module from a previous run so the correct file is loaded.
--- DaVinci Resolve keeps Lua state between script runs; without this, require()
--- returns the stale cached version from package.loaded.
+-- Force-evict cached modules from previous runs.
+-- DaVinci Resolve keeps Lua state between script invocations so require()
+-- would otherwise return stale cached versions from package.loaded.
 package.loaded["autosubs_core"] = nil
+package.loaded["libavutil"] = nil
+package.loaded["ljsocket"] = nil
+package.loaded["dkjson"] = nil
 
 log("Calling App:Init...")
 local ok, err = pcall(function()
