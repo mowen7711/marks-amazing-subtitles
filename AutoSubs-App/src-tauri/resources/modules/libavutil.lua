@@ -71,7 +71,8 @@ luaresolve =
 	},
 
 	load_library = function(name_pattern)
-		local fu = Fusion()
+		local fu = rawget(_G, "fusion") or (type(rawget(_G, "Fusion")) == "function" and Fusion())
+		if not fu then error("Could not obtain Fusion API object") end
 		local files = bmd.readdir(fu:MapPath("FusionLibs:"..iif(ffi.os == "Windows", "", "../"))..name_pattern)
 		assert(#files == 1 and files[1].IsDir == false, string.format("Couldn't find exact match for pattern \"%s.\"", name_pattern))
 		return ffi.load(files.Parent..files[1].Name)
