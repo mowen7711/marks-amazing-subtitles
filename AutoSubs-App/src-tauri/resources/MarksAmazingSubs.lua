@@ -118,7 +118,7 @@ if os_name == "Windows" then
     else
         -- install_path.txt not written (e.g. raw Tauri installer used instead of NSIS wrapper).
         -- Fall back to the default per-user Tauri install location.
-        local fallback = os.getenv("LOCALAPPDATA") .. "\\Programs\\Marks Amazing Subtitles"
+        local fallback = os.getenv("LOCALAPPDATA") .. "\\Marks Amazing Subtitles"
         log("install_path.txt not found, trying fallback: " .. fallback)
         local exe_check = io.open(fallback .. "\\autosubs.exe", "rb")
         if exe_check then

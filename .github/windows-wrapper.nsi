@@ -14,10 +14,10 @@ Section
   ExecWait '"$PLUGINSDIR\original-setup.exe" /S'
 
   ; Write install_path.txt so the Lua bridge can find the app.
-  ; Tauri 2 per-user default: %LOCALAPPDATA%\Programs\<productName>
+  ; Tauri 2 per-user default: %LOCALAPPDATA%\<productName>
   SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\MarksAmazingSubs"
   FileOpen $0 install_path.txt w
-  FileWrite $0 "$LOCALAPPDATA\Programs\Marks Amazing Subtitles"
+  FileWrite $0 "$LOCALAPPDATA\Marks Amazing Subtitles"
   FileClose $0
 
   ; Install the Lua entry-point script into DaVinci Resolve's scripts folder
