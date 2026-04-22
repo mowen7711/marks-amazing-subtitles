@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { platform } from '@tauri-apps/plugin-os';
 import { Model } from '@/types/interfaces';
 import { models } from '@/lib/models';
 
 interface ModelsContextType {
   modelsState: Model[];
   downloadedModelValues: string[];
+  isWindows: boolean;
   setModelsState: (models: Model[]) => void;
   checkDownloadedModels: () => Promise<void>;
   handleDeleteModel: (modelValue: string) => Promise<void>;
@@ -13,9 +15,18 @@ interface ModelsContextType {
 
 const ModelsContext = createContext<ModelsContextType | null>(null);
 
+function isWindowsUnsupported(value: string) {
+  return value === "parakeet" || value.startsWith("moonshine");
+}
+
 export function ModelsProvider({ children }: { children: React.ReactNode }) {
   const [modelsState, setModelsState] = useState(models);
   const [downloadedModelValues, setDownloadedModelValues] = useState<string[]>([]);
+  const [isWindows, setIsWindows] = useState(false);
+
+  useEffect(() => {
+    platform().then(p => setIsWindows(p === 'windows'));
+  }, []);
 
   async function checkDownloadedModels() {
     try {
@@ -23,11 +34,14 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
       console.log("Downloaded models:", downloadedModels)
       setDownloadedModelValues(downloadedModels)
 
+      const currentPlatform = await platform();
+      const onWindows = currentPlatform === 'windows';
       const updatedModels = models.map(model => ({
         ...model,
         isDownloaded: downloadedModels.some(downloadedModel =>
           downloadedModel === model.value
-        )
+        ),
+        isUnsupportedOnPlatform: onWindows && isWindowsUnsupported(model.value),
       }))
       setModelsState(updatedModels)
     } catch (error) {
@@ -60,6 +74,7 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
     <ModelsContext.Provider value={{
       modelsState,
       downloadedModelValues,
+      isWindows,
       setModelsState,
       checkDownloadedModels,
       handleDeleteModel,

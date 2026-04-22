@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { debugLog } from '@/utils/debug-logger';
 import { Subtitle, Speaker, Settings } from '@/types/interfaces';
 import { useResolve } from '@/contexts/ResolveContext';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -121,32 +122,41 @@ export function TranscriptProvider({ children }: { children: React.ReactNode }) 
     )
 
     setCurrentTranscriptFilename(filename);
+    debugLog('transcript', 'saveTranscript →', { filename, segmentCount: transcript.segments?.length ?? 'unknown', speakerCount: transcript.speakers?.length ?? 0 });
 
     // Save transcript to JSON file
-    const { segments, speakers } = await saveTranscript(transcript, filename, {
-      formatOptions: {
-        case: settings.textCase,
-        removePunctuation: settings.removePunctuation,
-        censoredWords: settings.enableCensor ? settings.censoredWords : [],
-      },
-      metadata: {
-        sourceType: settings.isStandaloneMode ? 'standalone' : 'resolve',
-        displayName: settings.isStandaloneMode
-          ? (fileInput?.split(/[/\\]/).pop()?.replace(/\.[^/.\\]+$/, '') || 'transcript')
-          : timelineInfo?.name || 'transcript',
-        timelineId: settings.isStandaloneMode ? undefined : timelineId,
-        timelineName: settings.isStandaloneMode ? undefined : timelineInfo?.name,
-        sourceFilePath: settings.isStandaloneMode ? fileInput || undefined : undefined,
-        sourceFileName: settings.isStandaloneMode && fileInput
-          ? fileInput.split(/[/\\]/).pop() || undefined
-          : undefined,
-      }
-    })
+    let segments: any[], speakers: any[];
+    try {
+      ({ segments, speakers } = await saveTranscript(transcript, filename, {
+        formatOptions: {
+          case: settings.textCase,
+          removePunctuation: settings.removePunctuation,
+          censoredWords: settings.enableCensor ? settings.censoredWords : [],
+        },
+        metadata: {
+          sourceType: settings.isStandaloneMode ? 'standalone' : 'resolve',
+          displayName: settings.isStandaloneMode
+            ? (fileInput?.split(/[/\\]/).pop()?.replace(/\.[^/.\\]+$/, '') || 'transcript')
+            : timelineInfo?.name || 'transcript',
+          timelineId: settings.isStandaloneMode ? undefined : timelineId,
+          timelineName: settings.isStandaloneMode ? undefined : timelineInfo?.name,
+          sourceFilePath: settings.isStandaloneMode ? fileInput || undefined : undefined,
+          sourceFileName: settings.isStandaloneMode && fileInput
+            ? fileInput.split(/[/\\]/).pop() || undefined
+            : undefined,
+        }
+      }));
+    } catch (saveError) {
+      debugLog('transcript', 'saveTranscript ← ERROR', String(saveError));
+      throw saveError;
+    }
+    debugLog('transcript', 'saveTranscript ← OK', { filename, segments: segments.length, speakers: speakers.length });
     console.log("Transcript saved to:", filename)
 
     // Update the global subtitles state to show in sidebar
     setSpeakers(speakers)
     setSubtitles(segments)
+    debugLog('transcript', 'Subtitles set in context', { count: segments.length });
     console.log("Subtitle list updated with", segments.length, "subtitles")
 
     return filename

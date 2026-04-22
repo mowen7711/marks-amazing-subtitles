@@ -3,6 +3,7 @@ import { load, Store } from '@tauri-apps/plugin-store';
 import { Settings } from '@/types/interfaces';
 import { getPreferredUiLanguage, initI18n, normalizeUiLanguage } from '@/i18n';
 import { models, modelSupportsLanguage, getFirstRecommendedModelForLanguage } from '@/lib/models';
+import { setDebugLoggingEnabled } from '@/utils/debug-logger';
 
 export const DEFAULT_SETTINGS: Settings = {
   // Mode
@@ -50,6 +51,9 @@ export const DEFAULT_SETTINGS: Settings = {
   animationType: "none",
   highlightType: "none",
   highlightColor: "#000000",
+
+  // Debug
+  debugLogging: false,
 };
 
 interface SettingsContextType {
@@ -114,6 +118,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (!isHydrated) return;
     initI18n(settings.uiLanguage);
   }, [settings.uiLanguage, isHydrated]);
+
+  // Keep debug logger in sync with setting
+  useEffect(() => {
+    setDebugLoggingEnabled(settings.debugLogging);
+  }, [settings.debugLogging]);
 
   // Whenever settings change, persist them
   useEffect(() => {

@@ -105,6 +105,19 @@ pub async fn transcribe_audio<R: Runtime>(
         "Transcription requested"
     );
 
+    // On Windows, Parakeet and Moonshine require transcribe-rs which is not compiled in.
+    // Reject early with a clear message rather than letting whisper-rs silently fail.
+    #[cfg(target_os = "windows")]
+    {
+        let m = options.model.to_lowercase();
+        if m.starts_with("parakeet") || m.starts_with("moonshine") {
+            return Err(format!(
+                "The '{}' model is not supported on Windows. Please select a Whisper model (tiny, base, small, medium, or large-v3-turbo) in the model picker.",
+                options.model
+            ));
+        }
+    }
+
     // Reset progress and cancellation state
     LATEST_PROGRESS.store(0, Ordering::Relaxed);
     if let Ok(mut progress_type_lock) = LATEST_PROGRESS_TYPE.lock() {

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { TimelineInfo } from '@/types/interfaces';
 import { getTimelineInfo, cancelExport, addSubtitlesToTimeline } from '@/api/resolve-api';
+import { debugLog } from '@/utils/debug-logger';
 
 interface ResolveContextType {
   timelineInfo: TimelineInfo;
@@ -38,27 +39,32 @@ export function ResolveProvider({ children }: { children: React.ReactNode }) {
     async function initializeTimeline() {
       const ts = new Date().toISOString();
       console.log(`[MAS ${ts}] Fetching timeline info from port 56003...`);
+      debugLog('resolve', 'Initial connection attempt');
       setConnectionAttempts(prev => prev + 1);
       try {
         const info = await getTimelineInfo().catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.log(`[MAS ${ts}] Resolve offline: ${msg}`);
+          debugLog('resolve', 'Initial connection failed', msg);
           setLastConnectionError(`${ts}: ${msg}`);
           return null;
         });
 
         if (info && info.timelineId) {
           console.log(`[MAS ${ts}] Connected — timeline "${info.name}" (id=${info.timelineId})`);
+          debugLog('resolve', 'Connected', { timeline: info.name, id: info.timelineId });
           setLastConnectionError(null);
           setTimelineInfo(info);
         } else if (info) {
           const msg = `Connected but no active timeline (timelineId empty). Response: ${JSON.stringify(info)}`;
           console.log(`[MAS ${ts}] ${msg}`);
+          debugLog('resolve', 'No active timeline', info);
           setLastConnectionError(`${ts}: ${msg}`);
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error(`[MAS ${ts}] Error initializing timeline: ${msg}`);
+        debugLog('resolve', 'Init error', msg);
         setLastConnectionError(`${ts}: ${msg}`);
       }
     }
@@ -105,12 +111,17 @@ export function ResolveProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function pushToTimeline(filename?: string, selectedTemplate?: string, selectedOutputTrack?: string) {
-    // If parameters are not provided, use defaults
     const finalFilename = filename || '';
     const finalTemplate = selectedTemplate || 'Subtitle';
     const finalTrack = selectedOutputTrack || '1';
-    
-    await addSubtitlesToTimeline(finalFilename, finalTemplate, finalTrack);
+    debugLog('resolve', 'pushToTimeline →', { filename: finalFilename, template: finalTemplate, track: finalTrack });
+    try {
+      await addSubtitlesToTimeline(finalFilename, finalTemplate, finalTrack);
+      debugLog('resolve', 'pushToTimeline ← OK');
+    } catch (err) {
+      debugLog('resolve', 'pushToTimeline ← ERROR', String(err));
+      throw err;
+    }
   }
 
   // Function to get source audio based on current mode
@@ -129,9 +140,10 @@ export function ResolveProvider({ children }: { children: React.ReactNode }) {
         // Import the required functions directly
         const { exportAudio, getExportProgress } = await import('@/api/resolve-api');
 
-        // Start the export (non-blocking)
+        debugLog('resolve', 'ExportAudio starting', { inputTracks });
         const exportResult = await exportAudio(inputTracks);
         console.log("Export started:", exportResult);
+        debugLog('resolve', 'ExportAudio started', exportResult);
 
         // Poll for export progress until completion
         let exportCompleted = false;
@@ -154,6 +166,7 @@ export function ResolveProvider({ children }: { children: React.ReactNode }) {
             exportCompleted = true;
             audioInfo = progressResult.audioInfo;
             console.log("Export completed:", audioInfo);
+            debugLog('resolve', 'Audio export complete', audioInfo);
           } else if (progressResult.cancelled) {
             console.log("Export was cancelled");
             setIsExporting(false);
@@ -161,6 +174,7 @@ export function ResolveProvider({ children }: { children: React.ReactNode }) {
             return null;
           } else if (progressResult.error) {
             console.error("Export error:", progressResult.message);
+            debugLog('resolve', 'Audio export ERROR', progressResult.message);
             setIsExporting(false);
             setExportProgress(0);
             throw new Error(progressResult.message || "Export failed");

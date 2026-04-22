@@ -17,6 +17,7 @@ import { TextFormattingPanel } from "@/components/settings/text-formatting-panel
 import { TrackSelector } from "@/components/settings/track-selector"
 import { ProcessingStepItem } from "@/components/processing/processing-step-item"
 import { useModels } from "@/contexts/ModelsContext"
+import { debugLog } from "@/utils/debug-logger"
 import { useProgress } from "@/contexts/ProgressContext"
 import { useTranscript } from "@/contexts/TranscriptContext"
 import { useSettings } from "@/contexts/SettingsContext"
@@ -70,6 +71,7 @@ interface TranscriptionPanelViewProps {
   onStart?: () => void
   onCancel?: () => void
   isProcessing?: boolean
+  transcriptionError?: string | null
 }
 
 function TranscriptionPanelView({
@@ -97,6 +99,7 @@ function TranscriptionPanelView({
   onStart,
   onCancel,
   isProcessing,
+  transcriptionError,
 }: TranscriptionPanelViewProps) {
   const { t } = useTranslation()
   const { refresh } = useResolve()
@@ -385,6 +388,12 @@ function TranscriptionPanelView({
               </div>
             )}
 
+            {transcriptionError && (
+              <div className="mt-1 rounded-md bg-destructive/10 border border-destructive/30 p-2 text-xs text-destructive break-words">
+                {transcriptionError}
+              </div>
+            )}
+
             {isProcessing ? (
               <Button
                 onClick={onCancel}
@@ -417,7 +426,7 @@ function TranscriptionPanelView({
 export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () => void } = {}) {
   const { subtitles, speakers, currentTranscriptFilename, processTranscriptionResults, exportSubtitlesAs, loadSubtitles } = useTranscript()
   const { settings, updateSetting } = useSettings()
-  const { modelsState, downloadedModelValues, checkDownloadedModels } = useModels()
+  const { modelsState, downloadedModelValues, checkDownloadedModels, isWindows } = useModels()
   const {
     timelineInfo,
     pushToTimeline,
@@ -440,6 +449,7 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
   } = useProgress()
 
   const [isProcessing, setIsProcessing] = React.useState(false)
+  const [transcriptionError, setTranscriptionError] = React.useState<string | null>(null)
   const [, setTranscriptionProgress] = React.useState(0)
   const [, setLabeledProgress] = React.useState<{ progress: number, type?: string, label?: string } | null>(null)
   const [fileInput, setFileInput] = React.useState<string | null>(null)
@@ -452,6 +462,18 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
     setFileInput(file)
     setFileInputSelectionId((v) => v + 1)
   }, [])
+
+  // Auto-switch away from Windows-unsupported models (Parakeet, Moonshine)
+  React.useEffect(() => {
+    if (!isWindows) return
+    const selectedModel = modelsState[settings.model]
+    if (selectedModel?.isUnsupportedOnPlatform) {
+      const fallbackIndex = modelsState.findIndex(m => !m.isUnsupportedOnPlatform)
+      if (fallbackIndex >= 0) {
+        updateSetting("model", fallbackIndex)
+      }
+    }
+  }, [isWindows, modelsState, settings.model, updateSetting])
 
   React.useEffect(() => {
     const run = async () => {
@@ -531,8 +553,22 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
     }
 
     setIsProcessing(true)
+    setTranscriptionError(null)
     setTranscriptionProgress(0)
     clearProgressSteps()
+    debugLog('transcription', 'Starting transcription', {
+      model: modelsState[settings.model]?.value,
+      language: settings.language,
+      translate: settings.translate,
+      diarize: settings.enableDiarize,
+      maxSpeakers: settings.maxSpeakers,
+      dtw: settings.enableDTW,
+      gpu: settings.enableGpu,
+      density: settings.textDensity,
+      mode: settings.isStandaloneMode ? 'standalone' : 'resolve',
+      voiceFilter: settings.voiceFilterEnabled && settings.enableDiarize,
+      voiceSampleCount: settings.voiceSamples.length,
+    })
 
     setupEventListeners({
       targetLanguage: settings.targetLanguage,
@@ -574,7 +610,13 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
         voiceSimilarityThreshold: settings.voiceSimilarityThreshold,
       }
 
-      const transcript = await invoke("transcribe_audio", { options })
+      debugLog('transcription', 'Invoking transcribe_audio')
+      const transcript = await invoke("transcribe_audio", { options }) as any
+      debugLog('transcription', 'transcribe_audio complete', {
+        segments: transcript?.segments?.length ?? 'unknown',
+        speakers: transcript?.speakers?.length ?? 0,
+        processingTimeSec: transcript?.processing_time_sec,
+      })
 
       completeAllProgressSteps()
 
@@ -586,6 +628,8 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
       )
     } catch (error) {
       console.error("Transcription failed:", error)
+      debugLog('transcription', 'ERROR', String(error))
+      setTranscriptionError(String(error))
     } finally {
       setIsProcessing(false)
       setTranscriptionProgress(0)
@@ -657,6 +701,7 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
       onStart={handleStartTranscription}
       onCancel={handleCancelTranscription}
       isProcessing={isProcessing}
+      transcriptionError={transcriptionError}
     />
   )
 }

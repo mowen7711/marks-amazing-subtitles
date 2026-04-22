@@ -244,15 +244,18 @@ export function ModelPicker({
 
                   const renderItem = (model: Model) => {
                     const actualModelIndex = modelsState.findIndex(m => m.value === model.value)
+                    const isUnsupported = model.isUnsupportedOnPlatform === true
                     return (
                       <CommandItem
                         key={model.value}
                         value={`${model.value} ${t(model.label)} ${t(model.description)}`}
                         onSelect={() => {
+                          if (isUnsupported) return
                           onSelectModel(actualModelIndex)
                           onOpenChange(false)
                         }}
-                        className="flex items-center justify-between p-2 cursor-pointer"
+                        disabled={isUnsupported}
+                        className={`flex items-center justify-between p-2 ${isUnsupported ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                       >
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <img src={model.image} alt={t(model.label) + " icon"} className="w-8 h-8 object-contain rounded flex-shrink-0" />
@@ -260,6 +263,11 @@ export function ModelPicker({
                             <div className="flex items-center gap-1.5">
                               <span className="font-medium text-xs">{t(model.label)}</span>
                               <ModelCachedBadge isDownloaded={model.isDownloaded} />
+                              {isUnsupported && (
+                                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4 text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 border-0">
+                                  macOS only
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">
                               {t(model.badge)}

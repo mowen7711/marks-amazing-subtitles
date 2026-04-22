@@ -90,6 +90,7 @@ export interface Model {
     accuracy: 1 | 2 | 3 // 1 = Poor, 2 = Standard, 3 = Excellent
     weight: 1 | 2 | 3 // 1 = Heavy, 2 = Standard, 3 = Lightweight
     isDownloaded: boolean
+    isUnsupportedOnPlatform?: boolean // true on Windows for parakeet/moonshine
 }
 
 // Settings Interface
@@ -139,6 +140,9 @@ export interface Settings {
     animationType: "none" | "pop-in" | "fade-in" | "slide-in" | "typewriter";
     highlightType: "none" | "outline" | "fill" | "bubble";
     highlightColor: string;
+
+    // Debug
+    debugLogging: boolean;
 }
 
 export interface TranscriptionOptions {

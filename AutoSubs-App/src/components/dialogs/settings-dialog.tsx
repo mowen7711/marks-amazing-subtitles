@@ -1,4 +1,4 @@
-import { Gauge, Clock } from "lucide-react";
+import { Gauge, Clock, Bug } from "lucide-react";
 import { DeleteIcon, type DeleteIconHandle } from "@/components/ui/icons/delete";
 import { useSettings } from "@/contexts/SettingsContext";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -151,6 +151,36 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </Field>
               </FieldGroup>
             </div>
+
+            {/* Advanced / Debug Settings */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                Advanced
+              </h4>
+
+              <FieldGroup>
+                <Field>
+                  <Item variant="outline" size="sm">
+                    <ItemMedia variant="icon" className="bg-orange-100 dark:bg-orange-900/30">
+                      <Bug className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>Debug Logging</ItemTitle>
+                      <ItemDescription className="text-xs leading-tight line-clamp-2">
+                        Write a full activity log to MAS-debug.log on your Desktop. Logs all Resolve calls, transcription events and file operations.
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <Switch
+                        checked={settings.debugLogging}
+                        onCheckedChange={(checked) => updateSetting("debugLogging", checked)}
+                      />
+                    </ItemActions>
+                  </Item>
+                </Field>
+              </FieldGroup>
+            </div>
+
           </div>
 
           <DialogFooter>
