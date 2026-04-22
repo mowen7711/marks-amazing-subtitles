@@ -618,6 +618,11 @@ export function TranscriptionPanel({ onViewSubtitles }: { onViewSubtitles?: () =
         processingTimeSec: transcript?.processing_time_sec,
       })
 
+      if (!transcript?.segments?.length) {
+        setTranscriptionError("Transcription complete, but no speech was detected in the audio. Try a different model, check your audio source, or adjust voice filter settings.")
+        return
+      }
+
       completeAllProgressSteps()
 
       await processTranscriptionResults(

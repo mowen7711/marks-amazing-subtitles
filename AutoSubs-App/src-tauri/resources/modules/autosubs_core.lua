@@ -1135,7 +1135,7 @@ function AddSubtitles(filePath, trackIndex, templateName, conflictMode)
 
     local data = load_subtitle_data(filePath)
     if not data then
-        return false
+        return false, "Could not read subtitle file: " .. tostring(filePath)
     end
 
     ---@type { mark_in: integer, mark_out: integer, segments: table, speakers: table }
@@ -1146,6 +1146,10 @@ function AddSubtitles(filePath, trackIndex, templateName, conflictMode)
     local markIn, markOut = get_mark_in_out(timeline, data)
     local subtitles = data["segments"]
     local speakers = data["speakers"]
+
+    if not subtitles or #subtitles == 0 then
+        return false, "No subtitles found in transcript — transcription may have detected no speech"
+    end
 
     local speakersExist = false
     if speakers and #speakers > 0 then
@@ -1167,7 +1171,7 @@ function AddSubtitles(filePath, trackIndex, templateName, conflictMode)
     local rootFolder = mediaPool:GetRootFolder()
     local templateItem, template_frame_rate = get_template(rootFolder, templateName)
     if not templateItem then
-        return false
+        return false, "Subtitle template '" .. tostring(templateName) .. "' not found in media pool — import or create a Text+ template first"
     end
 
     local clipList = build_clip_list(subtitles, speakers, speakersExist, trackIndex, templateItem, frame_rate,
@@ -1489,11 +1493,18 @@ function StartServer()
                                 body = json.encode(conflictInfo)
                             elseif data.func == "AddSubtitles" then
                                 print("[MAS Server] Adding subtitles to timeline...")
-                                local result = AddSubtitles(data.filePath, data.trackIndex, data.templateName, data.conflictMode)
-                                body = json.encode({
-                                    message = "Job completed",
-                                    result = result
-                                })
+                                local result, resultMsg = AddSubtitles(data.filePath, data.trackIndex, data.templateName, data.conflictMode)
+                                if result == false then
+                                    body = json.encode({
+                                        message = "Job failed: " .. (resultMsg or "Unknown error"),
+                                        result = false
+                                    })
+                                else
+                                    body = json.encode({
+                                        message = "Job completed",
+                                        result = result
+                                    })
+                                end
                             elseif data.func == "GeneratePreview" then
                                 print("[MAS Server] Generating preview...")
                                 local previewPath = GeneratePreview(data.speaker, data.templateName, data.exportPath)
