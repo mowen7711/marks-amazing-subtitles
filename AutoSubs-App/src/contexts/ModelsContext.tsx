@@ -25,7 +25,7 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
   const [isWindows, setIsWindows] = useState(false);
 
   useEffect(() => {
-    platform().then(p => setIsWindows(p === 'windows'));
+    setIsWindows(platform() === 'windows');
   }, []);
 
   async function checkDownloadedModels() {
@@ -34,8 +34,7 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
       console.log("Downloaded models:", downloadedModels)
       setDownloadedModelValues(downloadedModels)
 
-      const currentPlatform = await platform();
-      const onWindows = currentPlatform === 'windows';
+      const onWindows = platform() === 'windows';
       const updatedModels = models.map(model => ({
         ...model,
         isDownloaded: downloadedModels.some(downloadedModel =>
