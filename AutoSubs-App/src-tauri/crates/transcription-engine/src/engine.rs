@@ -148,10 +148,17 @@ impl Engine {
             // Consume the lazy pyannote_rs iterator: the for-loop calls `next()` under the hood,
             // forcing evaluation as we go. Each yielded pyannote_rs::Segment is converted into
             // our SpeechSegment and appended to `speech_segments` immediately.
+            // Segments shorter than 0.4s are dropped — they are almost always noise bursts and
+            // produce unreliable embeddings that generate false voice-filter matches.
+            const MIN_SEGMENT_DURATION_SECS: f64 = 0.4;
             let diarize_segments_iter = pyannote_rs::get_segments(&original_samples, 16000, &seg_path)
                 .map_err(|e| eyre!("{:?}", e))?;
             for seg_res in diarize_segments_iter {
                 let seg = seg_res.map_err(|e| eyre!("{:?}", e))?;
+                if seg.end - seg.start < MIN_SEGMENT_DURATION_SECS {
+                    tracing::debug!("Dropping short segment [{:.2}s-{:.2}s] ({:.2}s)", seg.start, seg.end, seg.end - seg.start);
+                    continue;
+                }
                 speech_segments.push(SpeechSegment { start: seg.start, end: seg.end, samples: seg.samples, speaker_id: None });
             }
 
