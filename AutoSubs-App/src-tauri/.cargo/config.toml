@@ -1,3 +1,6 @@
+[net]
+git-fetch-with-cli = true
+
 [target.aarch64-apple-darwin]
 # Ensure the linker targets macOS 13.3 or newer
 rustflags = ["-C", "link-arg=-mmacosx-version-min=13.3"]
