@@ -39,6 +39,12 @@ jobs:
         with:
           arch: x64
 
+      - name: Remove Git usr/bin from PATH (prevents link.exe conflict)
+        shell: pwsh
+        run: |
+          $newPath = ($env:PATH -split ';' | Where-Object { $_ -notlike '*Git*usr*bin*' }) -join ';'
+          echo "PATH=$newPath" >> $env:GITHUB_ENV
+
       - name: Install Vulkan SDK
         uses: jakoch/install-vulkan-sdk-action@v1.0.0
         with:
