@@ -34,16 +34,11 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Set up MSVC environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Remove Git usr/bin from PATH (prevents link.exe conflict)
+      - name: Set CMake generator for nested ExternalProject builds
         shell: pwsh
         run: |
-          $newPath = ($env:PATH -split ';' | Where-Object { $_ -notlike '*Git*usr*bin*' }) -join ';'
-          echo "PATH=$newPath" >> $env:GITHUB_ENV
+          echo "CMAKE_GENERATOR=Visual Studio 17 2022" >> $env:GITHUB_ENV
+          echo "CMAKE_GENERATOR_PLATFORM=x64" >> $env:GITHUB_ENV
 
       - name: Install Vulkan SDK
         uses: jakoch/install-vulkan-sdk-action@v1.0.0
