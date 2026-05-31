@@ -81,7 +81,15 @@ const SubtitleList = ({
     const getSpeakerIndex = useCallback((speakerId: string | undefined) => {
         if (!speakerId) return 0;
         const n = Number(speakerId);
-        if (!Number.isFinite(n)) return 0;
+        if (!Number.isFinite(n)) {
+            // Text label from voice filter (e.g. "mark", "sophie") — match against speaker names
+            const lower = speakerId.toLowerCase();
+            const idx = speakers.findIndex(s =>
+                s.name.toLowerCase() === `speaker ${lower}` ||
+                s.name.toLowerCase() === lower
+            );
+            return idx >= 0 ? idx : 0;
+        }
 
         const idx = n - speakerIdBase;
         if (idx >= 0 && idx < speakers.length) return idx;
@@ -90,7 +98,7 @@ const SubtitleList = ({
         if (n >= 0 && n < speakers.length) return n;
         if (n - 1 >= 0 && n - 1 < speakers.length) return n - 1;
         return 0;
-    }, [speakerIdBase, speakers.length]);
+    }, [speakerIdBase, speakers]);
 
     const filteredSubtitleItems = useMemo(() => {
         const query = searchQuery ?? "";

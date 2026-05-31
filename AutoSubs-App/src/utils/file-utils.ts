@@ -14,20 +14,19 @@ function normalizeTranscriptText(text: string): string {
 
 function resolveSpeakerLabel(speakerId: string, speakers: Speaker[], speakerIdBase: number): string {
   const numericSpeakerId = Number(speakerId);
-  const speakerIndex = Number.isFinite(numericSpeakerId)
-    ? numericSpeakerId - speakerIdBase
-    : -1;
-  const speakerName = speakerIndex >= 0 ? speakers[speakerIndex]?.name?.trim() : '';
-
-  if (speakerName) {
-    return speakerName;
-  }
-
   if (Number.isFinite(numericSpeakerId)) {
-    return `Speaker ${numericSpeakerId}`;
+    const speakerIndex = numericSpeakerId - speakerIdBase;
+    const speakerName = speakerIndex >= 0 ? speakers[speakerIndex]?.name?.trim() : '';
+    return speakerName || `Speaker ${numericSpeakerId}`;
   }
 
-  return `Speaker ${speakerId}`;
+  // Text label from voice filter — look up by name
+  const lower = speakerId.toLowerCase();
+  const match = speakers.find(s =>
+    s.name.toLowerCase() === `speaker ${lower}` ||
+    s.name.toLowerCase() === lower
+  );
+  return match?.name?.trim() || `Speaker ${speakerId}`;
 }
 
 export function generateTranscriptTxt(subtitles: Subtitle[], speakers: Speaker[] = []): string {
