@@ -30,19 +30,38 @@ pub fn label_speakers(
     let mut extractor = pyannote_rs::EmbeddingExtractor::new(&diarize_options.embedding_model_path)
         .map_err(|e| eyre!("{:?}", e))?;
 
-    // Pre-compute embeddings for voice samples if provided
+    // Pre-compute embeddings for voice samples if provided.
+    // Multiple samples with the same label are centroid-averaged into one
+    // representative embedding — more robust against recording variation and
+    // background noise than comparing against each sample individually.
     let sample_embeddings: Option<Vec<(String, Vec<f32>)>> = match voice_samples {
         Some(samples) if !samples.is_empty() => {
-            let mut embeddings = Vec::new();
+            let mut by_label: std::collections::HashMap<String, Vec<Vec<f32>>> = std::collections::HashMap::new();
             for sample in samples {
                 match extractor.compute(&sample.samples) {
-                    Ok(emb) => embeddings.push((sample.label.clone(), emb)),
+                    Ok(emb) => by_label.entry(sample.label.clone()).or_default().push(emb),
                     Err(e) => tracing::warn!(
                         "Failed to compute embedding for voice sample '{}': {:?}",
                         sample.label, e
                     ),
                 }
             }
+            let embeddings: Vec<(String, Vec<f32>)> = by_label.into_iter()
+                .filter_map(|(label, embs)| {
+                    if embs.is_empty() { return None; }
+                    let dim = embs[0].len();
+                    let mut centroid = vec![0.0f32; dim];
+                    for emb in &embs {
+                        for (c, v) in centroid.iter_mut().zip(emb.iter()) {
+                            *c += v;
+                        }
+                    }
+                    let n = embs.len() as f32;
+                    for c in centroid.iter_mut() { *c /= n; }
+                    tracing::debug!("Voice sample '{}': centroid from {} sample(s)", label, embs.len());
+                    Some((label, centroid))
+                })
+                .collect();
             if embeddings.is_empty() { None } else { Some(embeddings) }
         }
         _ => None,

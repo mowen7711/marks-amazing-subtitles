@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Voice sample filtering
   voiceFilterEnabled: false,
   voiceSamples: [],
-  voiceSimilarityThreshold: 0.75,
+  voiceSimilarityThreshold: 0.4,
 
   // Text settings
   textDensity: "standard",

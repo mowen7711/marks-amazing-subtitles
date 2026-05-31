@@ -175,7 +175,7 @@ export function SpeakerSelector() {
                                         onValueChange={([value]: [number]) =>
                                             updateSetting("voiceSimilarityThreshold", value)
                                         }
-                                        min={0.5}
+                                        min={0.2}
                                         max={0.95}
                                         step={0.05}
                                         className="w-full"
