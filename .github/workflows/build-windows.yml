@@ -34,6 +34,13 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.21
+        with:
+          cuda: '12.4.1'
+          method: network
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
+
       - name: Cache Rust build artefacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -63,7 +70,7 @@ jobs:
         shell: bash
         run: |
           cd AutoSubs-App
-          npm run tauri build -- -- --no-default-features
+          npm run tauri build -- -- --no-default-features --features cuda
 
       - name: Stage files for NSIS wrapper
         shell: bash
@@ -80,6 +87,10 @@ jobs:
           cp AutoSubs-App/src-tauri/resources/MarksAmazingSubs.lua MarksAmazingSubs.lua
           echo "Downloading VC++ 2015-2022 redistributable..."
           curl -sSL "https://aka.ms/vs/17/release/vc_redist.x64.exe" -o vc_redist.x64.exe
+          echo "Downloading onnxruntime (required by pyannote-rs/load-dynamic at runtime)..."
+          curl -sSL "https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-win-x64-1.20.1.zip" -o onnxruntime.zip
+          unzip -jo onnxruntime.zip "*/lib/onnxruntime.dll"
+          rm -f onnxruntime.zip
 
       - name: Copy NSIS wrapper script
         shell: bash

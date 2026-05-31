@@ -23,4 +23,8 @@ Section
   ; Install the Lua entry-point script into DaVinci Resolve's scripts folder
   SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
   File "MarksAmazingSubs.lua"
+
+  ; Install onnxruntime.dll into app directory (required by pyannote-rs CUDA build)
+  SetOutPath "$LOCALAPPDATA\Marks Amazing Subtitles"
+  File "onnxruntime.dll"
 SectionEnd
