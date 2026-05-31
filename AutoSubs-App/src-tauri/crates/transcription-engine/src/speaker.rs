@@ -12,6 +12,11 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if norm_a == 0.0 || norm_b == 0.0 { 0.0 } else { dot / (norm_a * norm_b) }
 }
 
+fn l2_normalize(v: &[f32]) -> Vec<f32> {
+    let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm == 0.0 { v.to_vec() } else { v.iter().map(|x| x / norm).collect() }
+}
+
 pub fn label_speakers(
     speech_segments: &mut [SpeechSegment],
     diarize_options: &DiarizeOptions,
@@ -31,35 +36,44 @@ pub fn label_speakers(
         .map_err(|e| eyre!("{:?}", e))?;
 
     // Pre-compute embeddings for voice samples if provided.
-    // Multiple samples with the same label are centroid-averaged into one
-    // representative embedding — more robust against recording variation and
-    // background noise than comparing against each sample individually.
-    let sample_embeddings: Option<Vec<(String, Vec<f32>)>> = match voice_samples {
+    //
+    // For each label we keep:
+    //   - a L2-normalized centroid (mean direction on the unit sphere) — stable representative
+    //   - all individual L2-normalized embeddings — for best-of-N matching
+    //
+    // Matching uses max(centroid_sim, max(individual_sims)) so a segment only needs to
+    // resemble *any* of the provided samples, not just the average.  Pre-normalizing before
+    // averaging means high-energy recordings don't bias the centroid.
+    struct LabelEmbeddings {
+        centroid: Vec<f32>,
+        individuals: Vec<Vec<f32>>,
+    }
+    let sample_embeddings: Option<Vec<(String, LabelEmbeddings)>> = match voice_samples {
         Some(samples) if !samples.is_empty() => {
             let mut by_label: std::collections::HashMap<String, Vec<Vec<f32>>> = std::collections::HashMap::new();
             for sample in samples {
                 match extractor.compute(&sample.samples) {
-                    Ok(emb) => by_label.entry(sample.label.clone()).or_default().push(emb),
+                    Ok(emb) => by_label.entry(sample.label.clone()).or_default().push(l2_normalize(&emb)),
                     Err(e) => tracing::warn!(
                         "Failed to compute embedding for voice sample '{}': {:?}",
                         sample.label, e
                     ),
                 }
             }
-            let embeddings: Vec<(String, Vec<f32>)> = by_label.into_iter()
-                .filter_map(|(label, embs)| {
-                    if embs.is_empty() { return None; }
-                    let dim = embs[0].len();
+            let embeddings: Vec<(String, LabelEmbeddings)> = by_label.into_iter()
+                .filter_map(|(label, normed_embs)| {
+                    if normed_embs.is_empty() { return None; }
+                    let dim = normed_embs[0].len();
                     let mut centroid = vec![0.0f32; dim];
-                    for emb in &embs {
+                    for emb in &normed_embs {
                         for (c, v) in centroid.iter_mut().zip(emb.iter()) {
                             *c += v;
                         }
                     }
-                    let n = embs.len() as f32;
-                    for c in centroid.iter_mut() { *c /= n; }
-                    tracing::debug!("Voice sample '{}': centroid from {} sample(s)", label, embs.len());
-                    Some((label, centroid))
+                    // Re-normalize the centroid so it sits on the unit sphere
+                    let centroid = l2_normalize(&centroid);
+                    tracing::debug!("Voice sample '{}': centroid from {} sample(s)", label, normed_embs.len());
+                    Some((label, LabelEmbeddings { centroid, individuals: normed_embs }))
                 })
                 .collect();
             if embeddings.is_empty() { None } else { Some(embeddings) }
@@ -76,11 +90,26 @@ pub fn label_speakers(
 
         let embedding_result = extractor.compute(&seg.samples);
         let speaker = match embedding_result {
-            Ok(embedding_vec) => {
+            Ok(raw_embedding) => {
+                let embedding_vec = if sample_embeddings.is_some() {
+                    // Already normalized per-label; normalize segment too for consistent dot products
+                    l2_normalize(&raw_embedding)
+                } else {
+                    raw_embedding
+                };
                 if let Some(ref samples_emb) = sample_embeddings {
-                    // Voice filter mode: find the closest matching sample
+                    // Voice filter mode: best-of-N matching.
+                    // For each label compute max(centroid_sim, max(individual_sims)) so the
+                    // segment only needs to resemble any one of the provided samples.
                     let best = samples_emb.iter()
-                        .map(|(label, emb)| (label.as_str(), cosine_similarity(&embedding_vec, emb)))
+                        .map(|(label, le)| {
+                            let centroid_sim = cosine_similarity(&embedding_vec, &le.centroid);
+                            let best_individual = le.individuals.iter()
+                                .map(|ind| cosine_similarity(&embedding_vec, ind))
+                                .fold(f32::NEG_INFINITY, f32::max);
+                            let sim = centroid_sim.max(best_individual);
+                            (label.as_str(), sim)
+                        })
                         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
                     match best {
