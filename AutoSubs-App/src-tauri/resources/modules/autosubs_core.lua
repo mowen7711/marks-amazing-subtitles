@@ -991,13 +991,18 @@ local function get_speaker_from_id(speakers, id)
     if speakerIndex == nil then
         return nil
     end
+    speakerIndex = speakerIndex + 1  -- backend uses 0-based IDs; Lua arrays are 1-based
+    return speakers[speakerIndex]
+end
 
-    local speaker = speakers[speakerIndex]
-    if speaker ~= nil then
-        return speaker
+local function resolve_clip_track(subtitle, speakers, speakersExist, trackIndex)
+    if speakersExist then
+        local speaker = get_speaker_from_id(speakers, subtitle.speaker_id)
+        if speaker and speaker.track ~= nil and speaker.track ~= "" then
+            return speaker.track
+        end
     end
-
-    return nil
+    return trackIndex
 end
 
 local function build_clip_list(subtitles, speakers, speakersExist, trackIndex, templateItem, frame_rate, template_frame_rate, timelineStart)
@@ -1009,23 +1014,20 @@ local function build_clip_list(subtitles, speakers, speakersExist, trackIndex, t
         local timeline_pos = timelineStart + start_frame
         local clip_timeline_duration = end_frame - start_frame
 
+        local itemTrack = resolve_clip_track(subtitle, speakers, speakersExist, trackIndex)
+
         if i < #subtitles then
             local next_start = timelineStart + to_frames(subtitles[i + 1]["start"], frame_rate)
             local frames_between = next_start - (timeline_pos + clip_timeline_duration)
-            if frames_between < joinThreshold then
-                clip_timeline_duration = clip_timeline_duration + frames_between + 1
+            local nextTrack = resolve_clip_track(subtitles[i + 1], speakers, speakersExist, trackIndex)
+            -- Only bridge the gap when both clips land on the same track; cross-track
+            -- extension would make two speakers' subtitles visible simultaneously.
+            if frames_between < joinThreshold and itemTrack == nextTrack then
+                clip_timeline_duration = clip_timeline_duration + frames_between
             end
         end
 
         local duration = (clip_timeline_duration / frame_rate) * template_frame_rate
-
-        local itemTrack = trackIndex
-        if speakersExist then
-            local speaker = get_speaker_from_id(speakers, subtitle.speaker_id)
-            if speaker and speaker.track ~= nil and speaker.track ~= "" then
-                itemTrack = speaker.track
-            end
-        end
 
         local newClip = {
             mediaPoolItem = templateItem,
