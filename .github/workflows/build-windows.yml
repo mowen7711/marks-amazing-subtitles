@@ -45,6 +45,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: AutoSubs-App/src-tauri
+          prefix-key: vs18  # bump when runner's VS major version changes
+
+      - name: Clear stale CMake caches
+        shell: bash
+        run: find AutoSubs-App/src-tauri/target -name "CMakeCache.txt" -delete 2>/dev/null || true
 
       - name: Download FFmpeg binary (Windows x86_64)
         env:
